@@ -25,6 +25,7 @@ public class GameView extends JPanel {
 	private GameController controller;
 	private BufferedImage whiteImg, blackImg, whiteKingImg, blackKingImg;
 
+	
 	private int selectedRow = -1, selectedCol = -1;
 	private List<Move> possibleMoves = new ArrayList<>();
 
@@ -116,7 +117,7 @@ public class GameView extends JPanel {
 
 		Node state = new Node(controller.getBoard().copy(), controller.isWhiteTurn());
 
-		Move aiMove = ab.findBestMove(state, 4);
+		Move aiMove = ab.findBestMove(state, 5);
 
 //		Node testState = new Node(controller.getBoard().copy(), controller.isWhiteTurn());
 //
@@ -299,6 +300,9 @@ public class GameView extends JPanel {
 		drawHighlights(g);
 	}
 
+	// ===============================================================================
+	// UC3.1 - Hiển thị bàn cờ
+	// ===============================================================================
 	private void drawBoard(Graphics g) {
 		for (int r = 0; r < 8; r++) {
 			for (int c = 0; c < 8; c++) {
@@ -309,6 +313,9 @@ public class GameView extends JPanel {
 		}
 	}
 
+	// ===============================================================================
+	// UC3.5 - Hiển thị quân thường & vua
+	// ===============================================================================
 	private void drawPieces(Graphics g) {
 		Board board = controller.getBoard();
 		for (int r = 0; r < 8; r++) {
@@ -325,6 +332,10 @@ public class GameView extends JPanel {
 		}
 	}
 
+	// ===============================================================================
+	// UC3.2 - Highlight nước đi hợp lệ
+	// UC3.6 - Highlight ô có thể đi
+	// ===============================================================================
 	private void drawHighlights(Graphics g) {
 
 		// highlight nước đi
@@ -340,6 +351,11 @@ public class GameView extends JPanel {
 			g.drawRect(selectedCol * CELL + 1, selectedRow * CELL + 1, CELL - 2, CELL - 2);
 		}
 	}
+	
+	// ===============================================================================
+	// UC3.4 - Thông báo lượt / kết quả
+	// UC3.8 - Thông báo thắng / thua / hòa
+	// ===============================================================================
 	public void showWinDialog(Winner winner) {
 	    String message = (winner == Winner.WHITE)
 	            ? " Trắng thắng!"
