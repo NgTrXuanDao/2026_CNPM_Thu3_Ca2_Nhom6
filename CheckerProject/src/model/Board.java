@@ -1,121 +1,112 @@
 package model;
 
-import java.util.ArrayList;
-import java.util.List;
-
-public class Board {
-   private static Piece[] listAddressPiece = new Piece[24];
-
-   // use case: khơi tạo ván chơi
-   public Board() {
-      this.initialize();
-   }
-
-   // use case: tạo bàn cờ 8x8, đặt quân cờ ban đầu
-   public void initialize() {
-      int rowBoard;
-      int colBoard;
-      int i=0;
-      for (rowBoard = 0; rowBoard < 3; ++rowBoard) {
-         for (colBoard = (rowBoard + 1) % 2; colBoard < 8; colBoard += 2) {
-            listAddressPiece[i] = new Piece(true, rowBoard, colBoard);
-            i++;
-         }
-      }
-
-      for (rowBoard = 5; rowBoard < 8; ++rowBoard) {
-         for (colBoard = (rowBoard + 1) % 2; colBoard < 8; colBoard += 2) {
-            listAddressPiece[i] = new Piece(false, rowBoard, colBoard);
-            i++;
-         }
-      }
-
-   }
-
-   // use case: Xác định người đi trước và chon quân
-   public Piece getPiece(int row, int col) {
-      for (Piece piece : listAddressPiece) {
-         if (piece.isValid() && piece.getCol() == col && piece.getRow() == row)
-            return piece;
-      }
-      return null;   
-   }
-
-   // use case: Hiển thị nước đi hợp lệ
-   public Move[] getPieceMoveToDisplay(Piece pieceSelect) {
-    Move[] arr = new Move[4];
-    int rowS = pieceSelect.getRow();
-    int colS = pieceSelect.getCol();
-
-    // 4 hướng: trên-trái, trên-phải, dưới-phải, dưới-trái
-    int[][] directions = {
-        {-1, -1}, // trên-trái
-        {-1,  1}, // trên-phải
-        { 1,  1}, // dưới-phải
-        { 1, -1}  // dưới-trái
-    };
-
-    for (int i = 0; i < directions.length; i++) {
-        int dr = directions[i][0];
-        int dc = directions[i][1];
-        arr[i] = getMoveForDirection(pieceSelect, rowS, colS, dr, dc);
-    }
-
-    pieceSelect.setMove(arr);
-    return arr;
-}
-
 /**
- * use case: Di chuyển quân cờ
- * use case: Kiểm tra nước đi hợp lệ
- * use case: Ăn quân 
+ * Board 8x8 cho Checkers. ô sẫm nằm ở (r+c)%2==1 chứa piece.
+ * Hỗ trợ copy/deepCopy để AI simulate.
  */
-private Move getMoveForDirection(Piece piece, int rowS, int colS, int dr, int dc) {
-    int row1 = rowS + dr;
-    int col1 = colS + dc;
+public class Board {
+    private Piece[][] board = new Piece[8][8];
 
-    // use case: Không đi sai luật hoặc vượt biên
-    if (isOutOfBounds(row1, col1)) return null;
-
-    Piece first = getPiece(row1, col1);
-
-    // use case: Ô trống đi bình thường
-    // use case: Nước đi bình thường - đi chéo 1 ô trống
-    if (first == null) {
-        Move mo = new MoveNomarl();
-        mo.setMove(rowS, colS, row1, col1);
-        return mo;
+    public Board() {
+        initialize();
     }
 
-    // use case: Nhảy qua quân đối phương
-    int row2 = rowS + 2 * dr;
-    int col2 = colS + 2 * dc;
-
-    if (isOutOfBounds(row2, col2)) return null;
-
-
-    Piece behind = getPiece(row2, col2);
-
-    // use case: Bắt buộc ăn quân nếu có thể
-    if (behind == null && first.isWhite() != piece.isWhite()) {
-        Move mo = new MoveOFF();
-        mo.setMove(rowS, colS, row2, col2);
-        return mo;
+    public Board(Piece[][] data) {
+        this.board = data;
     }
-   
-   // use case: Chặn nước đi thường nếu có thể ăn
-    return null;
-}
 
-// use case: Không đi sai luật hoặc vượt biên
-private boolean isOutOfBounds(int r, int c) {
-    return (r < 0 || r > 7 || c < 0 || c > 7);
-}
+    public void initialize() {
+        // clear
+        for (int r=0;r<8;r++)
+            for (int c=0;c<8;c++)
+                board[r][c] = null;
 
-// use case: di chuyển quân cờ
-public void setPiece(int row, int col, Piece pieceSelect) {
-    // TODO Auto-generated method stub
-    throw new UnsupportedOperationException("Unimplemented method 'setPiece'");
-}
+        // Black (top) rows 0..2
+        for (int r=0;r<3;r++) {
+            for (int c=0;c<8;c++) {
+                if ((r+c)%2==1) board[r][c] = new Piece(false);
+            }
+        }
 
+        // White (bottom) rows 5..7
+        for (int r=5;r<8;r++) {
+            for (int c=0;c<8;c++) {
+                if ((r+c)%2==1) board[r][c] = new Piece(true);
+            }
+        }
+    }
+
+    public Piece getPiece(int row, int col) {
+        if (!inBounds(row,col)) return null;
+        return board[row][col];
+    }
+
+    public void setPiece(int row, int col, Piece p) {
+        if (!inBounds(row,col)) return;
+        board[row][col] = p;
+    }
+
+    public void clearCell(int row, int col) {
+        if (!inBounds(row,col)) return;
+        board[row][col] = null;
+    }
+
+    public boolean inBounds(int r, int c) {
+        return r>=0 && r<8 && c>=0 && c<8;
+    }
+
+    // deep copy toàn bộ board
+    public Board copy() {
+        Piece[][] data = new Piece[8][8];
+        for (int r=0;r<8;r++) {
+            for (int c=0;c<8;c++) {
+                Piece p = board[r][c];
+                data[r][c] = (p==null) ? null : p.copy();
+            }
+        }
+        return new Board(data);
+    }
+    public int countWhitePieces() {
+        int count = 0;
+
+        for (int row = 0; row < board.length; row++) {
+            for (int col = 0; col < board[row].length; col++) {
+                Piece p = board[row][col];
+                if (p != null && p.isWhite) {
+                    count++;
+                }
+            }
+        }
+
+        return count;
+    }
+
+
+    // Optional: helper hiển thị (debug)
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        for (int r=0;r<8;r++) {
+            for (int c=0;c<8;c++) {
+                Piece p = board[r][c];
+                sb.append((p==null?".":p.toString()) + "\t");
+            }
+            sb.append("\n");
+        }
+        return sb.toString();
+    }
+
+	public int countBlackPieces() {
+		 int count = 0;
+
+	        for (int row = 0; row < board.length; row++) {
+	            for (int col = 0; col < board[row].length; col++) {
+	                Piece p = board[row][col];
+	                if (p != null && !p.isWhite) {
+	                    count++;
+	                }
+	            }
+	        }
+
+	        return count;
+	}
 }
