@@ -20,12 +20,20 @@ import java.io.IOException;
 import java.util.List;
 import java.util.ArrayList;
 
+/*
+ * UC1.9 - Xac dinh nguoi di truoc
+ * Nguoi thuc hien: Nhom 6
+ * Ngay cap nhat: 02/06/2026
+ * Noi dung:
+ * - Hien thi thong tin luot di hien tai (White/Black turn)
+ * - Ve truc tiep thong tin turn trong paintComponent (khong dung child component)
+ */
+
 public class GameView extends JPanel {
 
 	private GameController controller;
 	private BufferedImage whiteImg, blackImg, whiteKingImg, blackKingImg;
 
-	
 	private int selectedRow = -1, selectedCol = -1;
 	private List<Move> possibleMoves = new ArrayList<>();
 
@@ -33,25 +41,30 @@ public class GameView extends JPanel {
 
 	private boolean aiThinking = false;
 
+	// UC1.9: Chieu cao panel thong tin luot
+	private static final int INFO_PANEL_HEIGHT = 40;
+
 	public GameView(GameController controller) {
 		this.controller = controller;
 		loadImages();
 
-		setPreferredSize(new Dimension(8 * CELL, 8 * CELL));
+		setPreferredSize(new Dimension(8 * CELL, 8 * CELL + INFO_PANEL_HEIGHT));
 
 		addMouseListener(new MouseAdapter() {
 			@Override
 			public void mouseClicked(MouseEvent e) {
 				int c = e.getX() / CELL;
-				int r = e.getY() / CELL;
+				// Tru INFO_PANEL_HEIGHT boi vi thong tin luot duoc ve o phia tren
+				int r = (e.getY() - INFO_PANEL_HEIGHT) / CELL;
 
-				 handleClick(r, c);
-				//ABVsAB();
+				if (r >= 0 && r < 8 && c >= 0 && c < 8) {
+					handleClick(r, c);
+				}
 			}
 		});
 	}
 
-	// Load Ảnh
+	// Load Anh
 	private void loadImages() {
 		try {
 			whiteImg = ImageIO.read(getClass().getResource("/img/white.png"));
@@ -99,7 +112,6 @@ public class GameView extends JPanel {
 
 		
 		controller.makeMove(chosen);
-		
 		
 		Winner winner = controller.checkWinner(controller.getBoard());
         if (winner != Winner.NONE) {
@@ -189,7 +201,6 @@ public class GameView extends JPanel {
 
 		
 		controller.makeMove(chosen);
-		
 		
 		Winner winner = controller.checkWinner(controller.getBoard());
         if (winner != Winner.NONE) {
@@ -292,16 +303,53 @@ public class GameView extends JPanel {
 		return null;
 	}
 
+	/*
+	 * UC1.9 - Xac dinh nguoi di truoc
+	 * Lay chuoi hien thi thong tin luot di hien tai
+	 */
+	private String getTurnText() {
+		if (controller.isWhiteTurn()) {
+			return "Luot di: Trang (White)";
+		} else {
+			return "Luot di: Den (Black)";
+		}
+	}
+
 	@Override
 	protected void paintComponent(Graphics g) {
 		super.paintComponent(g);
-		drawBoard(g);
-		drawPieces(g);
-		drawHighlights(g);
+		// UC1.9: Ve thong tin luot o phia tren
+		drawTurnInfo(g);
+		// Ve ban co (dich xuong duoi phan thong tin luot)
+		Graphics2D g2d = (Graphics2D) g.create();
+		g2d.translate(0, INFO_PANEL_HEIGHT);
+		drawBoard(g2d);
+		drawPieces(g2d);
+		drawHighlights(g2d);
+		g2d.dispose();
+	}
+
+	/*
+	 * UC1.9 - Xac dinh nguoi di truoc
+	 * Ve thong tin luot di hien tai o phia tren cung
+	 */
+	private void drawTurnInfo(Graphics g) {
+		// Background cho phan thong tin
+		g.setColor(new Color(50, 50, 50));
+		g.fillRect(0, 0, getWidth(), INFO_PANEL_HEIGHT);
+
+		// Van ban thong tin luot
+		g.setColor(Color.WHITE);
+		g.setFont(new Font("Arial", Font.BOLD, 14));
+		String text = getTurnText();
+		FontMetrics fm = g.getFontMetrics();
+		int x = (getWidth() - fm.stringWidth(text)) / 2;
+		int y = (INFO_PANEL_HEIGHT + fm.getAscent()) / 2 - 2;
+		g.drawString(text, x, y);
 	}
 
 	// ===============================================================================
-	// UC3.1 - Hiển thị bàn cờ
+	// UC3.1 - Hien thi ban co
 	// ===============================================================================
 	private void drawBoard(Graphics g) {
 		for (int r = 0; r < 8; r++) {
@@ -314,7 +362,7 @@ public class GameView extends JPanel {
 	}
 
 	// ===============================================================================
-	// UC3.5 - Hiển thị quân thường & vua
+	// UC3.5 - Hien thi quan thuong & vua
 	// ===============================================================================
 	private void drawPieces(Graphics g) {
 		Board board = controller.getBoard();
@@ -333,18 +381,18 @@ public class GameView extends JPanel {
 	}
 
 	// ===============================================================================
-	// UC3.2 - Highlight nước đi hợp lệ
-	// UC3.6 - Highlight ô có thể đi
+	// UC3.2 - Highlight nuoc di hop le
+	// UC3.6 - Highlight o co the di
 	// ===============================================================================
 	private void drawHighlights(Graphics g) {
 
-		// highlight nước đi
+		// highlight nuoc di
 		g.setColor(new Color(0, 255, 0, 120));
 		for (Move m : possibleMoves) {
 			g.fillRect(m.getToCol() * CELL, m.getToRow() * CELL, CELL, CELL);
 		}
 
-		// highlight ô chọn
+		// highlight o chon
 		if (selectedRow != -1) {
 			g.setColor(Color.YELLOW);
 			g.drawRect(selectedCol * CELL, selectedRow * CELL, CELL, CELL);
@@ -353,18 +401,18 @@ public class GameView extends JPanel {
 	}
 	
 	// ===============================================================================
-	// UC3.4 - Thông báo lượt / kết quả
-	// UC3.8 - Thông báo thắng / thua / hòa
+	// UC3.4 - Thong bao luot / ket qua
+	// UC3.8 - Thong bao thang / thua / hoa
 	// ===============================================================================
 	public void showWinDialog(Winner winner) {
 	    String message = (winner == Winner.WHITE)
-	            ? " Trắng thắng!"
-	            : " Đen thắng!";
+	            ? " Trang thang!"
+	            : " Den thang!";
 
 	    JOptionPane.showMessageDialog(
 	            this,
 	            message,
-	            "KẾT THÚC TRẬN ĐẤU",
+	            "KET THUC TRAN DAU",
 	            JOptionPane.INFORMATION_MESSAGE
 	    );
 	    System.out.println("end");

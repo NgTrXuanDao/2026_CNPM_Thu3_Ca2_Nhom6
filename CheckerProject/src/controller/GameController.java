@@ -1,12 +1,14 @@
 package controller;
 
 import model.Board;
+import model.FirstTurnMode;
 import model.Move;
 import model.Piece;
 
 import java.awt.Point;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 /**
  * GameController: nắm Board, lượt (whiteTurn).
@@ -22,16 +24,89 @@ import java.util.List;
  */
 public class GameController {
     private  Board board;
-    private boolean whiteTurn = true; // White bắt đầu
+    private boolean whiteTurn;
 
+    /*
+     * UC1.9 - Xác định người đi trước
+     * Người thực hiện: Nhóm 6
+     * Ngày cập nhật: 02/06/2026
+     * Nội dung:
+     * - Bỏ hardcode whiteTurn = true
+     * - Thêm constructor nhận FirstTurnMode
+     * - Thêm method setFirstTurnFromMode() để xử lý logic chọn lượt
+     */
+
+    /** Mặc định White đi trước */
     public GameController(Board board) {
         this.board = board;
+        this.whiteTurn = true; // White bắt đầu (mặc định)
     }
 
-    public GameController(Board board,boolean whiteTurn) {
+    /** Khởi tạo với lượt chỉ định */
+    public GameController(Board board, boolean whiteTurn) {
 		this.board = board;
 		this.whiteTurn = whiteTurn;
 	}
+
+    /*
+     * UC1.9 - Xác định người đi trước
+     * Khởi tạo GameController với chế độ chọn người đi trước
+     * @param board Bàn cờ
+     * @param mode  Chế độ: WHITE, BLACK hoặc RANDOM
+     */
+    public GameController(Board board, FirstTurnMode mode) {
+        this.board = board;
+        // Xác định whiteTurn dựa vào mode
+        this.whiteTurn = resolveFirstTurn(mode);
+    }
+
+    /*
+     * UC1.9 - Xác định người đi trước
+     * Giải quyết chế độ FirstTurnMode thành giá trị boolean whiteTurn
+     * @param mode Chế độ chọn người đi trước
+     * @return true nếu White đi trước, false nếu Black đi trước
+     */
+    /*
+     * UC1.9 - Xác định người đi trước
+     * Chuyển FirstTurnMode thành boolean whiteTurn
+     * @param mode Chế độ (có thể null -> fallback White)
+     * @return true = White, false = Black
+     */
+    public static boolean resolveFirstTurn(FirstTurnMode mode) {
+        if (mode == null) return true; // Null safety: mặc định White
+        switch (mode) {
+            case WHITE:
+                return true;  // White đi trước
+            case BLACK:
+                return false; // Black đi trước
+            case RANDOM:
+                // Random true/false - 50% cơ hội cho mỗi bên
+                return new Random().nextBoolean();
+            default:
+                return true; // Mặc định White đi trước
+        }
+    }
+
+    /*
+     * UC1.9 - Xác định người đi trước
+     * Thiết lập lại lượt đi dựa trên chế độ (dùng khi restart)
+     * @param mode Chế độ người đi trước
+     */
+    public void setFirstTurn(FirstTurnMode mode) {
+        this.whiteTurn = resolveFirstTurn(mode);
+    }
+
+    /*
+     * UC1.9 - Xác định người đi trước
+     * Reset bàn cờ và thiết lập lại lượt đi đầu tiên
+     * @param mode Chế độ người đi trước (có thể null để giữ nguyên chế độ cũ)
+     */
+    public void resetGame(FirstTurnMode mode) {
+        this.board.initialize(); // Khởi tạo lại bàn cờ
+        if (mode != null) {
+            setFirstTurn(mode);  // Thiết lập lượt đi đầu
+        }
+    }
 
 	public Board getBoard() { return board; }
     public boolean isWhiteTurn() { return whiteTurn; }
@@ -123,8 +198,7 @@ public class GameController {
 		
 	}
     // UC1.17 - Hết quân → thua và
-    //UC1.18 - Hết nước đi → thua
-    //
+    // UC1.18 - Hết nước đi → thua
 	    public boolean isOver() {
 			if(!hasPieces(true)||!hasPieces(false)||getAllMoves(whiteTurn).isEmpty()) return true;
 			return false;
