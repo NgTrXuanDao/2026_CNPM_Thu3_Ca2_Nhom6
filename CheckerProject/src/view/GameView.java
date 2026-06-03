@@ -22,7 +22,7 @@ import java.util.ArrayList;
 
 /*
  * UC1.9 - Xac dinh nguoi di truoc
- * Nguoi thuc hien: Nhom 6
+ * Nguoi thuc hien: Doan Ngoc Anh
  * Ngay cap nhat: 02/06/2026
  * Noi dung:
  * - Hien thi thong tin luot di hien tai (White/Black turn)
@@ -77,7 +77,6 @@ public class GameView extends JPanel {
 	}
 
 	private void handleClick(int r, int c) {
-		AlphaBeta ab = new AlphaBeta();
 		if (aiThinking)
 			return;
 
@@ -127,43 +126,34 @@ public class GameView extends JPanel {
 
 		aiThinking = true;
 
-		Node state = new Node(controller.getBoard().copy(), controller.isWhiteTurn());
+		new Thread(() -> {
+			Node state = new Node(controller.getBoard().copy(), controller.isWhiteTurn());
+			AlphaBeta ai = new AlphaBeta();
+			Move aiMove = ai.findBestMove(state, 6);
 
-		Move aiMove = ab.findBestMove(state, 5);
+			try {
+				Thread.sleep(2000); // Độ trễ 2 giây
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
 
-//		Node testState = new Node(controller.getBoard().copy(), controller.isWhiteTurn());
-//
-//		MiniMax mm = new MiniMax();
-//		// AlphaBeta ab = new AlphaBeta();
-//
-//		mm.findBestMove(testState, 1);
-//		ab.findBestMove(testState, 1);
-//
-//		mm.findBestMove(testState, 2);
-//		ab.findBestMove(testState, 2);
-//
-//		mm.findBestMove(testState, 3);
-//		ab.findBestMove(testState, 3);
-//
-//		mm.findBestMove(testState, 4);
-//		ab.findBestMove(testState, 4);
-//
-//		mm.findBestMove(testState, 5);
-//		ab.findBestMove(testState, 5);
-//
-//		mm.findBestMove(testState, 6);
-//		ab.findBestMove(testState, 6);
-
-		if (aiMove != null) {
-			controller.makeMove(aiMove);
-			Winner winner1 = controller.checkWinner(controller.getBoard());
-	        if (winner1 != Winner.NONE) {
-	            showWinDialog(winner);
-	        }
-		}
-
-		aiThinking = false;
-		repaint();
+			if (aiMove != null) {
+				SwingUtilities.invokeLater(() -> {
+					controller.makeMove(aiMove);
+					Winner winner1 = controller.checkWinner(controller.getBoard());
+					if (winner1 != Winner.NONE) {
+						showWinDialog(winner1);
+					}
+					aiThinking = false;
+					repaint();
+				});
+			} else {
+				SwingUtilities.invokeLater(() -> {
+					aiThinking = false;
+					repaint();
+				});
+			}
+		}).start();
 	}
 	private void handleClick1(int r, int c) {
 		AlphaBeta ab = new AlphaBeta();
@@ -218,7 +208,7 @@ public class GameView extends JPanel {
 
 		Node state = new Node(controller.getBoard().copy(), controller.isWhiteTurn());
 
-		Move aiMove = ab.findBestMove(state, 4);
+		Move aiMove = ab.findBestMove(state, 6);
 
 		if (aiMove != null) {
 			controller.makeMove(aiMove);
