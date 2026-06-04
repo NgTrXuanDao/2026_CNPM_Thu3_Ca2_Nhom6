@@ -29,6 +29,20 @@ import java.util.ArrayList;
  * - Ve truc tiep thong tin turn trong paintComponent (khong dung child component)
  */
 
+/*
+ * UC 3.1 den 3.8 - Hien thi, UI/UX & Hieu ung Animation
+ * Nguoi thuc hien: Tran Quang Duy
+ * Ngay cap nhat: 04/06/2026
+ * Noi dung:
+ * - Highlight o dang chon voi hieu ung nhap nhay (UC3.3)
+ * - Highlight cac nuoc di hop le voi hieu ung fade mau (UC3.3)
+ * - Hien thi anh quan thuong va quan vua cho ca hai ben
+ * - Animation di chuyen quan co mo phong tu vi tri cu den vi tri moi (UC3.7)
+ * - Animation an quan: quan bi an mo dan truoc khi bien mat (UC3.7)
+ * - Thong bao ket qua tran dau khi co nguoi thang
+ * - Hien thi thong tin luot di hien tai (tich hop tu UC1.9)
+ */
+
 public class GameView extends JPanel {
 
     private GameController controller;
