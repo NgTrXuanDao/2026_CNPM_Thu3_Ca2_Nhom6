@@ -59,6 +59,11 @@ public class GameView extends JPanel {
     // UC1.9: Chieu cao panel thong tin luot
     private static final int INFO_PANEL_HEIGHT = 40;
 
+    private boolean isPaused = false;
+    // vị trí cho nút tạm dừng và thoát
+    private Rectangle pauseBtnRect = new Rectangle(10, 8, 80, 24);
+    private Rectangle exitBtnRect = new Rectangle(8 * 70 - 90, 8, 80, 24);
+
     public GameView(GameController controller) {
         this.controller = controller;
         loadImages();
@@ -68,6 +73,39 @@ public class GameView extends JPanel {
         addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
+                int mouseX = e.getX();
+                int mouseY = e.getY();
+
+                if (mouseY < INFO_PANEL_HEIGHT) {
+                    if (pauseBtnRect.contains(mouseX, mouseY)) {
+                        isPaused = !isPaused;
+                        repaint();
+                        return;
+                    }
+                    // UC 4.3 : Thoát game
+                    if (exitBtnRect.contains(mouseX, mouseY)) {
+                        int confirm = JOptionPane.showConfirmDialog(
+                                GameView.this,
+                                "Ban co chac chan muon thoat game khong?",
+                                "THOAT GAME",
+                                JOptionPane.YES_NO_OPTION,
+                                JOptionPane.QUESTION_MESSAGE
+                        );
+                        if (confirm == JOptionPane.YES_OPTION) {
+                            JFrame topFrame = (JFrame) SwingUtilities.getWindowAncestor(GameView.this);
+                            if (topFrame != null) {
+                                topFrame.dispose();
+                            }
+                        }
+                        return;
+                    }
+                    return;
+                }
+
+                if (isPaused) {
+                    return;
+                }
+
                 int c = e.getX() / CELL;
                 // Tru INFO_PANEL_HEIGHT boi vi thong tin luot duoc ve o phia tren
                 int r = (e.getY() - INFO_PANEL_HEIGHT) / CELL;
@@ -98,7 +136,7 @@ public class GameView extends JPanel {
             e.printStackTrace();
         }
     }
-// mode : dễ
+    // mode : dễ
     private void handleClick(int r, int c) {
         if (aiThinking)
             return;
@@ -160,8 +198,17 @@ public class GameView extends JPanel {
                 Thread.currentThread().interrupt();
             }
 
+            if (isPaused) {
+                aiThinking = false;
+                return;
+            }
+
             if (aiMove != null) {
                 SwingUtilities.invokeLater(() -> {
+                    if (isPaused) {
+                        aiThinking = false;
+                        return;
+                    }
                     controller.makeMove(aiMove);
                     Winner winner1 = controller.checkWinner(controller.getBoard());
                     if (winner1 != Winner.NONE) {
@@ -245,86 +292,95 @@ public class GameView extends JPanel {
         aiThinking = false;
         repaint();
     }
-// mode : trung bình
-private void handleClick3(int r, int c) {
-    if (aiThinking)
-        return;
+    // mode : trung bình
+    private void handleClick3(int r, int c) {
+        if (aiThinking)
+            return;
 
-    Piece p = controller.getBoard().getPiece(r, c);
+        Piece p = controller.getBoard().getPiece(r, c);
 
-    if (selectedRow == -1) {
+        if (selectedRow == -1) {
+
+            if (p != null && p.isWhite == controller.isWhiteTurn()) {
+                selectedRow = r;
+                selectedCol = c;
+                possibleMoves = controller.getValidMoves(r, c);
+            }
+
+            repaint();
+            return;
+        }
 
         if (p != null && p.isWhite == controller.isWhiteTurn()) {
             selectedRow = r;
             selectedCol = c;
             possibleMoves = controller.getValidMoves(r, c);
+            repaint();
+            return;
         }
 
-        repaint();
-        return;
-    }
+        Move chosen = findMove(r, c);
 
-    if (p != null && p.isWhite == controller.isWhiteTurn()) {
-        selectedRow = r;
-        selectedCol = c;
-        possibleMoves = controller.getValidMoves(r, c);
-        repaint();
-        return;
-    }
-
-    Move chosen = findMove(r, c);
-
-    if (chosen == null) {
-        repaint();
-        return;
-    }
-
-    controller.makeMove(chosen);
-
-    Winner winner = controller.checkWinner(controller.getBoard());
-    if (winner != Winner.NONE) {
-        showWinDialog(winner);
-    }
-    selectedRow = selectedCol = -1;
-    possibleMoves.clear();
-
-    repaint();
-
-    if (controller.isOver())
-        return;
-
-    aiThinking = true;
-
-    new Thread(() -> {
-        Node state = new Node(controller.getBoard().copy(), controller.isWhiteTurn());
-        AlphaBeta ai = new AlphaBeta();
-        Move aiMove = ai.findBestMove(state, 3);
-
-        try {
-            Thread.sleep(2000); // Độ trễ 2 giây
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        if (chosen == null) {
+            repaint();
+            return;
         }
 
-        if (aiMove != null) {
-            SwingUtilities.invokeLater(() -> {
-                controller.makeMove(aiMove);
-                Winner winner1 = controller.checkWinner(controller.getBoard());
-                if (winner1 != Winner.NONE) {
-                    showWinDialog(winner1);
-                }
+        controller.makeMove(chosen);
+
+        Winner winner = controller.checkWinner(controller.getBoard());
+        if (winner != Winner.NONE) {
+            showWinDialog(winner);
+        }
+        selectedRow = selectedCol = -1;
+        possibleMoves.clear();
+
+        repaint();
+
+        if (controller.isOver())
+            return;
+
+        aiThinking = true;
+
+        new Thread(() -> {
+            Node state = new Node(controller.getBoard().copy(), controller.isWhiteTurn());
+            AlphaBeta ai = new AlphaBeta();
+            Move aiMove = ai.findBestMove(state, 3);
+
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+         // UC 4.2 : Tạm dừng game
+            if (isPaused) {
                 aiThinking = false;
-                repaint();
-            });
-        } else {
-            SwingUtilities.invokeLater(() -> {
-                aiThinking = false;
-                repaint();
-            });
-        }
-    }).start();
-}
-// UC 2.1 : PVP
+                return;
+            }
+
+            if (aiMove != null) {
+                SwingUtilities.invokeLater(() -> {
+                    if (isPaused) {
+                        aiThinking = false;
+                        return;
+                    }
+                    controller.makeMove(aiMove);
+                    Winner winner1 = controller.checkWinner(controller.getBoard());
+                    if (winner1 != Winner.NONE) {
+                        showWinDialog(winner1);
+                    }
+                    aiThinking = false;
+                    repaint();
+                });
+            } else {
+                SwingUtilities.invokeLater(() -> {
+                    aiThinking = false;
+                    repaint();
+                });
+            }
+        }).start();
+    }
+    // UC 2.1 : PVP
     private void handleClick4(int r, int c) {
         if (aiThinking)
             return;
@@ -446,6 +502,9 @@ private void handleClick3(int r, int c) {
      * Lay chuoi hien thi thong tin luot di hien tai
      */
     private String getTurnText() {
+        if (isPaused) {
+            return "GAME DANG TAM DUNG";
+        }
         if (controller.isWhiteTurn()) {
             return "Luot di: Trang (White)";
         } else {
@@ -484,6 +543,28 @@ private void handleClick3(int r, int c) {
         int x = (getWidth() - fm.stringWidth(text)) / 2;
         int y = (INFO_PANEL_HEIGHT + fm.getAscent()) / 2 - 2;
         g.drawString(text, x, y);
+
+        Graphics2D g2d = (Graphics2D) g;
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+        // Ve nut Tam dung / Tiep tuc
+        g2d.setColor(isPaused ? new Color(200, 150, 50) : new Color(70, 70, 70));
+        g2d.fillRoundRect(pauseBtnRect.x, pauseBtnRect.y, pauseBtnRect.width, pauseBtnRect.height, 8, 8);
+        g2d.setColor(Color.WHITE);
+        g2d.setFont(new Font("Arial", Font.PLAIN, 12));
+        String pText = isPaused ? "Tiep tuc" : "Tam dung";
+        int px = pauseBtnRect.x + (pauseBtnRect.width - g2d.getFontMetrics().stringWidth(pText)) / 2;
+        int py = pauseBtnRect.y + (pauseBtnRect.height + g2d.getFontMetrics().getAscent()) / 2 - 2;
+        g2d.drawString(pText, px, py);
+
+        // Ve nut Thoat
+        g2d.setColor(new Color(150, 50, 50));
+        g2d.fillRoundRect(exitBtnRect.x, exitBtnRect.y, exitBtnRect.width, exitBtnRect.height, 8, 8);
+        g2d.setColor(Color.WHITE);
+        String eText = "Thoat";
+        int ex = exitBtnRect.x + (exitBtnRect.width - g2d.getFontMetrics().stringWidth(eText)) / 2;
+        int ey = exitBtnRect.y + (exitBtnRect.height + g2d.getFontMetrics().getAscent()) / 2 - 2;
+        g2d.drawString(eText, ex, ey);
     }
 
     // ===============================================================================
