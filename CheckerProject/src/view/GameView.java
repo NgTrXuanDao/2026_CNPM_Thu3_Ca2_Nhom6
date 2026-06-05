@@ -32,15 +32,14 @@ import java.util.ArrayList;
 /*
  * UC 3.1 den 3.8 - Hien thi, UI/UX & Hieu ung Animation
  * Nguoi thuc hien: Tran Quang Duy
- * Ngay cap nhat: 04/06/2026
+ * Ngay cap nhat: 05/06/2026
  * Noi dung:
- * - Highlight o dang chon voi hieu ung nhap nhay (UC3.3)
- * - Highlight cac nuoc di hop le voi hieu ung fade mau (UC3.3)
- * - Hien thi anh quan thuong va quan vua cho ca hai ben
- * - Animation di chuyen quan co mo phong tu vi tri cu den vi tri moi (UC3.7)
- * - Animation an quan: quan bi an mo dan truoc khi bien mat (UC3.7)
- * - Thong bao ket qua tran dau khi co nguoi thang
- * - Hien thi thong tin luot di hien tai (tich hop tu UC1.9)
+ * - Triển khai Master Loop 60 FPS bằng javax.swing.Timer cho toàn bộ UI Component.
+ * - UC3.1: Nâng cấp bảng màu chế độ cờ gỗ Mahogany cao cấp.
+ * - UC3.3: Hiệu ứng mạch đập (Pulse Breathing Alpha) cho ô chọn và ô gợi ý nước đi.
+ * - UC3.5: Khử răng cưa hình ảnh quân cờ kết hợp kỹ thuật vẽ bóng đổ Drop-Shadow tạo khối 3D.
+ * - UC3.7: Thuật toán chuyển động nội suy Cubic Ease-Out cho quân cờ di chuyển và Alpha Fade-out cho quân bị ăn.
+ * - UC3.8: Trì hoãn hiển thị Dialog thắng cuộc chờ kết thúc hoạt ảnh động để tránh xung đột luồng.
  */
 
 public class GameView extends JPanel {
@@ -64,15 +63,38 @@ public class GameView extends JPanel {
     private Rectangle pauseBtnRect = new Rectangle(10, 8, 80, 24);
     private Rectangle exitBtnRect = new Rectangle(8 * 70 - 90, 8, 80, 24);
 
+    // Bien trang thai animation
+    private Timer uiMasterTimer;
+    private float pulseAlpha = 0.4f;
+    private boolean pulseGrowing = true;
+
+    private boolean isAnimating = false;
+    private Move activeAnimatingMove = null;
+    private double slideProgress = 0.0;
+    private double captureFadeAlpha = 1.0;
+    private Runnable postAnimCallback = null;
+
     public GameView(GameController controller) {
         this.controller = controller;
         loadImages();
 
         setPreferredSize(new Dimension(8 * CELL, 8 * CELL + INFO_PANEL_HEIGHT));
 
+        // Khởi tạo bộ dựng hoạt ảnh 60 FPS (16ms)
+        initAnimationEngine();
+
         addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
+                // CHỐNG SPAM CLICK: Khóa toàn bộ tương tác khi quân cờ đang chạy hoặc AI đang tính
+                if (isAnimating || aiThinking || isPaused) {
+                    if (isPaused && e.getY() < INFO_PANEL_HEIGHT && pauseBtnRect.contains(e.getX(), e.getY())) {
+                        isPaused = false;
+                        repaint();
+                    }
+                    return;
+                }
+
                 int mouseX = e.getX();
                 int mouseY = e.getY();
 
@@ -82,12 +104,11 @@ public class GameView extends JPanel {
                         repaint();
                         return;
                     }
-                    // UC 4.3 : Thoát game
                     if (exitBtnRect.contains(mouseX, mouseY)) {
                         int confirm = JOptionPane.showConfirmDialog(
                                 GameView.this,
-                                "Ban co chac chan muon thoat game khong?",
-                                "THOAT GAME",
+                                "Bạn có chắc chắn muốn thoát game không?",
+                                "THOÁT GAME",
                                 JOptionPane.YES_NO_OPTION,
                                 JOptionPane.QUESTION_MESSAGE
                         );
@@ -102,12 +123,7 @@ public class GameView extends JPanel {
                     return;
                 }
 
-                if (isPaused) {
-                    return;
-                }
-
                 int c = e.getX() / CELL;
-                // Tru INFO_PANEL_HEIGHT boi vi thong tin luot duoc ve o phia tren
                 int r = (e.getY() - INFO_PANEL_HEIGHT) / CELL;
 
                 if (r >= 0 && r < 8 && c >= 0 && c < 8) {
@@ -125,6 +141,57 @@ public class GameView extends JPanel {
         });
     }
 
+    // Master UI loop engine
+    private void initAnimationEngine() {
+        uiMasterTimer = new Timer(16, e -> {
+            // 1. Xử lý nhịp đập mờ ảo (Pulse) cho phần Highlight ô cờ
+            if (pulseGrowing) {
+                pulseAlpha += 0.025f;
+                if (pulseAlpha >= 0.75f) { pulseAlpha = 0.75f; pulseGrowing = false; }
+            } else {
+                pulseAlpha -= 0.025f;
+                if (pulseAlpha <= 0.25f) { pulseAlpha = 0.25f; pulseGrowing = true; }
+            }
+
+            // 2. Xử lý tịnh tiến Slide và hiệu ứng biến mất của quân cờ
+            if (isAnimating) {
+                if (slideProgress < 1.0) {
+                    slideProgress += 0.08; // Tốc độ trượt di chuyển quân
+                    if (slideProgress >= 1.0) {
+                        slideProgress = 1.0;
+                    }
+                } else if (captureFadeAlpha > 0.0) {
+                    captureFadeAlpha -= 0.12; // Tốc độ mờ dần khi ăn quân đối phương
+                    if (captureFadeAlpha <= 0.0) {
+                        captureFadeAlpha = 0.0;
+                        isAnimating = false;
+                        // Hoàn tất hoạt ảnh -> Thực thi đổi trạng thái trên Board
+                        if (postAnimCallback != null) {
+                            SwingUtilities.invokeLater(postAnimCallback);
+                        }
+                    }
+                }
+            }
+            repaint();
+        });
+        uiMasterTimer.start();
+    }
+
+    //Hàm đánh chặn nước đi để kích hoạt hoạt ảnh trước khi lưu vào Board
+    private void executeMoveWithAnimation(Move chosen, Runnable onCompleteAction) {
+        if (chosen == null) return;
+        this.activeAnimatingMove = chosen;
+        this.slideProgress = 0.0;
+        this.captureFadeAlpha = 1.0;
+        this.isAnimating = true;
+        this.postAnimCallback = () -> {
+            controller.makeMove(chosen);
+            if (onCompleteAction != null) {
+                onCompleteAction.run();
+            }
+        };
+    }
+
     // Load Anh
     private void loadImages() {
         try {
@@ -138,292 +205,167 @@ public class GameView extends JPanel {
     }
     // mode : dễ
     private void handleClick(int r, int c) {
-        if (aiThinking)
-            return;
-
+        if (aiThinking || isAnimating) return;
         Piece p = controller.getBoard().getPiece(r, c);
 
-        if (selectedRow == -1) {
-
+        if (selectedRow == -1 || (p != null && p.isWhite == controller.isWhiteTurn())) {
             if (p != null && p.isWhite == controller.isWhiteTurn()) {
-                selectedRow = r;
-                selectedCol = c;
+                selectedRow = r; selectedCol = c;
                 possibleMoves = controller.getValidMoves(r, c);
             }
-
-            repaint();
-            return;
-        }
-
-        if (p != null && p.isWhite == controller.isWhiteTurn()) {
-            selectedRow = r;
-            selectedCol = c;
-            possibleMoves = controller.getValidMoves(r, c);
             repaint();
             return;
         }
 
         Move chosen = findMove(r, c);
+        if (chosen == null) { repaint(); return; }
 
-        if (chosen == null) {
-            repaint();
-            return;
-        }
+        // Chạy hiệu ứng trượt quân của Người chơi
+        executeMoveWithAnimation(chosen, () -> {
+            Winner winner = controller.checkWinner(controller.getBoard());
+            if (winner != Winner.NONE) { showWinDialog(winner); }
+            selectedRow = selectedCol = -1;
+            possibleMoves.clear();
 
+            if (controller.isOver()) return;
+            aiThinking = true;
 
-        controller.makeMove(chosen);
+            new Thread(() -> {
+                Node state = new Node(controller.getBoard().copy(), controller.isWhiteTurn());
+                AlphaBeta ai = new AlphaBeta();
+                Move aiMove = ai.findBestMove(state, 5);
 
-        Winner winner = controller.checkWinner(controller.getBoard());
-        if (winner != Winner.NONE) {
-            showWinDialog(winner);
-        }
-        selectedRow = selectedCol = -1;
-        possibleMoves.clear();
+                try { Thread.sleep(1200); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
 
-        repaint();
-
-        if (controller.isOver())
-            return;
-
-        aiThinking = true;
-
-        new Thread(() -> {
-            Node state = new Node(controller.getBoard().copy(), controller.isWhiteTurn());
-            AlphaBeta ai = new AlphaBeta();
-            Move aiMove = ai.findBestMove(state, 5);
-
-            try {
-                Thread.sleep(2000); // Độ trễ 2 giây
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-
-            if (isPaused) {
-                aiThinking = false;
-                return;
-            }
-
-            if (aiMove != null) {
-                SwingUtilities.invokeLater(() -> {
-                    if (isPaused) {
-                        aiThinking = false;
-                        return;
-                    }
-                    controller.makeMove(aiMove);
-                    Winner winner1 = controller.checkWinner(controller.getBoard());
-                    if (winner1 != Winner.NONE) {
-                        showWinDialog(winner1);
-                    }
-                    aiThinking = false;
-                    repaint();
-                });
-            } else {
-                SwingUtilities.invokeLater(() -> {
-                    aiThinking = false;
-                    repaint();
-                });
-            }
-        }).start();
+                if (aiMove != null) {
+                    SwingUtilities.invokeLater(() -> {
+                        // Chạy hiệu ứng trượt quân của AI dữ liệu máy tính
+                        executeMoveWithAnimation(aiMove, () -> {
+                            Winner winner1 = controller.checkWinner(controller.getBoard());
+                            if (winner1 != Winner.NONE) showWinDialog(winner1);
+                            aiThinking = false;
+                        });
+                    });
+                } else {
+                    SwingUtilities.invokeLater(() -> aiThinking = false);
+                }
+            }).start();
+        });
     }
+
     // mode : khó
     private void handleClick1(int r, int c) {
-        AlphaBeta ab = new AlphaBeta();
-        if (aiThinking)
-            return;
-
+        if (aiThinking || isAnimating) return;
         Piece p = controller.getBoard().getPiece(r, c);
 
-        if (selectedRow == -1) {
-
+        if (selectedRow == -1 || (p != null && p.isWhite == controller.isWhiteTurn())) {
             if (p != null && p.isWhite == controller.isWhiteTurn()) {
-                selectedRow = r;
-                selectedCol = c;
+                selectedRow = r; selectedCol = c;
                 possibleMoves = controller.getValidMoves(r, c);
             }
-
-            repaint();
-            return;
-        }
-
-        if (p != null && p.isWhite == controller.isWhiteTurn()) {
-            selectedRow = r;
-            selectedCol = c;
-            possibleMoves = controller.getValidMoves(r, c);
             repaint();
             return;
         }
 
         Move chosen = findMove(r, c);
+        if (chosen == null) { repaint(); return; }
 
-        if (chosen == null) {
-            repaint();
-            return;
-        }
+        executeMoveWithAnimation(chosen, () -> {
+            Winner winner = controller.checkWinner(controller.getBoard());
+            if (winner != Winner.NONE) showWinDialog(winner);
+            selectedRow = selectedCol = -1;
+            possibleMoves.clear();
 
+            if (controller.isOver()) return;
+            aiThinking = true;
 
-        controller.makeMove(chosen);
-
-        Winner winner = controller.checkWinner(controller.getBoard());
-        if (winner != Winner.NONE) {
-            showWinDialog(winner);
-        }
-        selectedRow = selectedCol = -1;
-        possibleMoves.clear();
-
-        repaint();
-
-        if (controller.isOver())
-            return;
-
-        aiThinking = true;
-
-        Node state = new Node(controller.getBoard().copy(), controller.isWhiteTurn());
-
-        Move aiMove = ab.findBestMove(state, 6);
-
-        if (aiMove != null) {
-            controller.makeMove(aiMove);
-            Winner winner1 = controller.checkWinner(controller.getBoard());
-            if (winner1 != Winner.NONE) {
-                showWinDialog(winner);
-            }
-        }
-
-        aiThinking = false;
-        repaint();
-    }
-    // mode : trung bình
-    private void handleClick3(int r, int c) {
-        if (aiThinking)
-            return;
-
-        Piece p = controller.getBoard().getPiece(r, c);
-
-        if (selectedRow == -1) {
-
-            if (p != null && p.isWhite == controller.isWhiteTurn()) {
-                selectedRow = r;
-                selectedCol = c;
-                possibleMoves = controller.getValidMoves(r, c);
-            }
-
-            repaint();
-            return;
-        }
-
-        if (p != null && p.isWhite == controller.isWhiteTurn()) {
-            selectedRow = r;
-            selectedCol = c;
-            possibleMoves = controller.getValidMoves(r, c);
-            repaint();
-            return;
-        }
-
-        Move chosen = findMove(r, c);
-
-        if (chosen == null) {
-            repaint();
-            return;
-        }
-
-        controller.makeMove(chosen);
-
-        Winner winner = controller.checkWinner(controller.getBoard());
-        if (winner != Winner.NONE) {
-            showWinDialog(winner);
-        }
-        selectedRow = selectedCol = -1;
-        possibleMoves.clear();
-
-        repaint();
-
-        if (controller.isOver())
-            return;
-
-        aiThinking = true;
-
-        new Thread(() -> {
             Node state = new Node(controller.getBoard().copy(), controller.isWhiteTurn());
-            AlphaBeta ai = new AlphaBeta();
-            Move aiMove = ai.findBestMove(state, 3);
-
-            try {
-                Thread.sleep(2000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-         // UC 4.2 : Tạm dừng game
-            if (isPaused) {
-                aiThinking = false;
-                return;
-            }
+            AlphaBeta ab = new AlphaBeta();
+            Move aiMove = ab.findBestMove(state, 6);
 
             if (aiMove != null) {
-                SwingUtilities.invokeLater(() -> {
-                    if (isPaused) {
-                        aiThinking = false;
-                        return;
-                    }
-                    controller.makeMove(aiMove);
+                executeMoveWithAnimation(aiMove, () -> {
                     Winner winner1 = controller.checkWinner(controller.getBoard());
-                    if (winner1 != Winner.NONE) {
-                        showWinDialog(winner1);
-                    }
+                    if (winner1 != Winner.NONE) showWinDialog(winner1);
                     aiThinking = false;
-                    repaint();
                 });
             } else {
-                SwingUtilities.invokeLater(() -> {
-                    aiThinking = false;
-                    repaint();
-                });
+                aiThinking = false;
             }
-        }).start();
+        });
     }
-    // UC 2.1 : PVP
-    private void handleClick4(int r, int c) {
-        if (aiThinking)
-            return;
 
+    // mode : trung bình
+    private void handleClick3(int r, int c) {
+        if (aiThinking || isAnimating) return;
         Piece p = controller.getBoard().getPiece(r, c);
 
-        if (selectedRow == -1) {
-
+        if (selectedRow == -1 || (p != null && p.isWhite == controller.isWhiteTurn())) {
             if (p != null && p.isWhite == controller.isWhiteTurn()) {
-                selectedRow = r;
-                selectedCol = c;
+                selectedRow = r; selectedCol = c;
                 possibleMoves = controller.getValidMoves(r, c);
             }
-
-            repaint();
-            return;
-        }
-
-        if (p != null && p.isWhite == controller.isWhiteTurn()) {
-            selectedRow = r;
-            selectedCol = c;
-            possibleMoves = controller.getValidMoves(r, c);
             repaint();
             return;
         }
 
         Move chosen = findMove(r, c);
+        if (chosen == null) { repaint(); return; }
 
-        if (chosen == null) {
+        executeMoveWithAnimation(chosen, () -> {
+            Winner winner = controller.checkWinner(controller.getBoard());
+            if (winner != Winner.NONE) showWinDialog(winner);
+            selectedRow = selectedCol = -1;
+            possibleMoves.clear();
+
+            if (controller.isOver()) return;
+            aiThinking = true;
+
+            new Thread(() -> {
+                Node state = new Node(controller.getBoard().copy(), controller.isWhiteTurn());
+                AlphaBeta ai = new AlphaBeta();
+                Move aiMove = ai.findBestMove(state, 3);
+
+                try { Thread.sleep(1200); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+
+                if (aiMove != null) {
+                    SwingUtilities.invokeLater(() -> {
+                        executeMoveWithAnimation(aiMove, () -> {
+                            Winner winner1 = controller.checkWinner(controller.getBoard());
+                            if (winner1 != Winner.NONE) showWinDialog(winner1);
+                            aiThinking = false;
+                        });
+                    });
+                } else {
+                    SwingUtilities.invokeLater(() -> aiThinking = false);
+                }
+            }).start();
+        });
+    }
+
+    // UC 2.1 : PVP
+    private void handleClick4(int r, int c) {
+        if (aiThinking || isAnimating) return;
+        Piece p = controller.getBoard().getPiece(r, c);
+
+        if (selectedRow == -1 || (p != null && p.isWhite == controller.isWhiteTurn())) {
+            if (p != null && p.isWhite == controller.isWhiteTurn()) {
+                selectedRow = r; selectedCol = c;
+                possibleMoves = controller.getValidMoves(r, c);
+            }
             repaint();
             return;
         }
 
-        controller.makeMove(chosen);
+        Move chosen = findMove(r, c);
+        if (chosen == null) { repaint(); return; }
 
-        Winner winner = controller.checkWinner(controller.getBoard());
-        if (winner != Winner.NONE) {
-            showWinDialog(winner);
-        }
-        selectedRow = selectedCol = -1;
-        possibleMoves.clear();
-
-        repaint();
+        executeMoveWithAnimation(chosen, () -> {
+            Winner winner = controller.checkWinner(controller.getBoard());
+            if (winner != Winner.NONE) showWinDialog(winner);
+            selectedRow = selectedCol = -1;
+            possibleMoves.clear();
+        });
     }
 
     private void alphaBetaVsMiniMax() {
@@ -456,7 +398,7 @@ public class GameView extends JPanel {
         repaint();
     }
 
-    private void ABVsAB() {
+        private void ABVsAB() {
         AlphaBeta ab0 = new AlphaBeta();
         AlphaBeta ab1 = new AlphaBeta();
 
@@ -581,60 +523,109 @@ public class GameView extends JPanel {
     }
 
     // ===============================================================================
-    // UC3.5 - Hien thi quan thuong & vua
+    // UC3.2 - Highlight nước đi hợp lệ
+    // UC3.3 - Hiệu ứng nhấp nháy / mạch đập (Pulse Alpha) của ô chọn
+    // UC3.6 - Highlight ô có thể đi
+    // ===============================================================================
+    private void drawHighlights(Graphics g) {
+        Graphics2D g2d = (Graphics2D) g.create();
+
+        // 1. [UC3.2 & UC3.6] - Highlight các ô đích có thể di chuyển đến (Xanh lục mềm mại tỏa sáng Glow)
+        for (Move m : possibleMoves) {
+            g2d.setColor(new Color(46, 204, 113, (int)(pulseAlpha * 180)));
+            g2d.fillRoundRect(m.getToCol() * CELL + 6, m.getToRow() * CELL + 6, CELL - 12, CELL - 12, 10, 10);
+            g2d.setColor(new Color(46, 204, 113, 220));
+            g2d.setStroke(new BasicStroke(2));
+            g2d.drawRoundRect(m.getToCol() * CELL + 6, m.getToRow() * CELL + 6, CELL - 12, CELL - 12, 10, 10);
+        }
+
+        // 2. [UC3.3] - Highlight ô cờ hiện tại đang được nhấn chọn (Màu vàng dạ quang mạch đập)
+        if (selectedRow != -1) {
+            g2d.setColor(new Color(241, 196, 15, (int)(pulseAlpha * 255)));
+            g2d.setStroke(new BasicStroke(3));
+            g2d.drawRect(selectedCol * CELL + 2, selectedRow * CELL + 2, CELL - 4, CELL - 4);
+        }
+        g2d.dispose();
+    }
+
+    // ===============================================================================
+    // UC3.5 & UC3.7 - Vẽ quân cờ (Vua/Thường) & Xử lý Hoạt ảnh Di chuyển / Ăn quân mờ dần
     // ===============================================================================
     private void drawPieces(Graphics g) {
+        Graphics2D g2d = (Graphics2D) g.create();
         Board board = controller.getBoard();
+
+        int skipRow = -1, skipCol = -1;
+        List<Point> capturedPoints = new ArrayList<>();
+
+        if (isAnimating && activeAnimatingMove != null) {
+            skipRow = activeAnimatingMove.from().y;
+            skipCol = activeAnimatingMove.from().x;
+            capturedPoints = activeAnimatingMove.captures;
+        }
+
+        // UC3.5: Vẽ các quân cờ tĩnh kết hợp bóng đổ Drop-Shadow tạo khối 3D
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
+                if (r == skipRow && c == skipCol) continue;
+
                 Piece p = board.getPiece(r, c);
-                if (p == null)
-                    continue;
+                if (p == null) continue;
 
                 BufferedImage img = p.isWhite ? (p.isKing ? whiteKingImg : whiteImg)
                         : (p.isKing ? blackKingImg : blackImg);
 
-                g.drawImage(img, c * CELL + 5, r * CELL + 5, CELL - 10, CELL - 10, null);
+                g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
+
+                // UC3.7: Kiểm tra nếu ô này chứa quân bị ăn -> Thực hiện hoạt ảnh mờ dần Fade out
+                if (isAnimating && capturedPoints.contains(new Point(c, r))) {
+                    g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, (float) captureFadeAlpha));
+                }
+
+                g2d.setColor(new Color(0, 0, 0, 60));
+                g2d.fillOval(c * CELL + 8, r * CELL + 11, CELL - 16, CELL - 16);
+
+                g2d.drawImage(img, c * CELL + 6, r * CELL + 6, CELL - 12, CELL - 12, null);
             }
         }
+
+        // UC3.7: Thực hiện nội suy tọa độ trượt (Cubic Ease-Out) cho quân cờ đang chạy
+        if (isAnimating && activeAnimatingMove != null) {
+            int fr = activeAnimatingMove.from().y;
+            int fc = activeAnimatingMove.from().x;
+            int tr = activeAnimatingMove.to().y;
+            int tc = activeAnimatingMove.to().x;
+
+            Piece movingPiece = board.getPiece(fr, fc);
+            if (movingPiece != null) {
+                BufferedImage img = movingPiece.isWhite ? (movingPiece.isKing ? whiteKingImg : whiteImg)
+                        : (movingPiece.isKing ? blackKingImg : blackImg);
+
+                double easeProgress = 1.0 - Math.pow(1.0 - slideProgress, 3);
+
+                int curX = (int) (fc * CELL + (tc - fc) * CELL * easeProgress);
+                int curY = (int) (fr * CELL + (tr - fr) * CELL * easeProgress);
+
+                g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
+                g2d.setColor(new Color(0, 0, 0, 80));
+                g2d.fillOval(curX + 8, curY + 11, CELL - 16, CELL - 16);
+
+                g2d.drawImage(img, curX + 6, curY + 6, CELL - 12, CELL - 12, null);
+            }
+        }
+        g2d.dispose();
     }
 
     // ===============================================================================
-    // UC3.2 - Highlight nuoc di hop le
-    // UC3.6 - Highlight o co the di
-    // ===============================================================================
-    private void drawHighlights(Graphics g) {
-
-        // highlight nuoc di
-        g.setColor(new Color(0, 255, 0, 120));
-        for (Move m : possibleMoves) {
-            g.fillRect(m.getToCol() * CELL, m.getToRow() * CELL, CELL, CELL);
-        }
-
-        // highlight o chon
-        if (selectedRow != -1) {
-            g.setColor(Color.YELLOW);
-            g.drawRect(selectedCol * CELL, selectedRow * CELL, CELL, CELL);
-            g.drawRect(selectedCol * CELL + 1, selectedRow * CELL + 1, CELL - 2, CELL - 2);
-        }
-    }
-
-    // ===============================================================================
-    // UC3.4 - Thong bao luot / ket qua
-    // UC3.8 - Thong bao thang / thua / hoa
+    // UC3.8 - Thông báo kết quả trận đấu
     // ===============================================================================
     public void showWinDialog(Winner winner) {
-        String message = (winner == Winner.WHITE)
-                ? " Trang thang!"
-                : " Den thang!";
-
+        String message = (winner == Winner.WHITE) ? "Quan TRANG da gianh chien thang!" : "Quan DEN da gianh chien thang!";
         JOptionPane.showMessageDialog(
                 this,
                 message,
                 "KET THUC TRAN DAU",
                 JOptionPane.INFORMATION_MESSAGE
         );
-        System.out.println("end");
     }
-
 }
