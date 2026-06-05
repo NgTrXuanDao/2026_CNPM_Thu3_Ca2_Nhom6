@@ -57,6 +57,8 @@ public class Main {
         // Cau hinh frame
         f.setSize(600, 660);
         f.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+        f.setLocationRelativeTo(null);
         f.setVisible(true);
     }
 }
