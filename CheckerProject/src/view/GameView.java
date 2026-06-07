@@ -1,24 +1,24 @@
 package view;
-
-import controller.GameController;
-import controller.Winner;
-import model.Board;
-import model.Move;
-import model.Piece;
-
-import javax.swing.*;
-
+ 
 import ai.AlphaBeta;
 import ai.MiniMax;
 import ai.Node;
-
+import controller.GameController;
+import controller.MoveHistoryManager;
+import controller.SaveLoadManager;
+import controller.Winner;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
-import javax.imageio.ImageIO;
+import java.io.File;
 import java.io.IOException;
-import java.util.List;
 import java.util.ArrayList;
+import java.util.List;
+import javax.imageio.ImageIO;
+import javax.swing.*;
+import model.Board;
+import model.Move;
+import model.Piece;
 
 /*
  * UC1.9 - Xac dinh nguoi di truoc - Đoàn Ngọc Ánh
@@ -33,15 +33,35 @@ import java.util.ArrayList;
 
 /*
  * UC 3.1 den 3.8 - Hien thi, UI/UX & Hieu ung Animation
- * Nguoi thuc hien: Tran Quang Duy
- * Ngay cap nhat: 05/06/2026
+ * Nguoi thuc hien: Tran Quang Duy (MSSV: 23130081)
+ * Ngay cap nhat: 05/06/2026 - Cap nhat lan 2: 06/06/2026
  * Noi dung:
  * - Triển khai Master Loop 60 FPS bằng javax.swing.Timer cho toàn bộ UI Component.
  * - UC3.1: Nâng cấp bảng màu chế độ cờ gỗ Mahogany cao cấp.
+ * - UC3.2: Highlight nước đi hợp lệ bằng màu xanh lục glow.
  * - UC3.3: Hiệu ứng mạch đập (Pulse Breathing Alpha) cho ô chọn và ô gợi ý nước đi.
+ * - UC3.4: Thông báo lượt chơi (White/Black turn) trên thanh trạng thái.
  * - UC3.5: Khử răng cưa hình ảnh quân cờ kết hợp kỹ thuật vẽ bóng đổ Drop-Shadow tạo khối 3D.
+ * - UC3.6: Highlight ô có thể đi (cùng logic với UC3.2, gộp trong drawHighlights()).
  * - UC3.7: Thuật toán chuyển động nội suy Cubic Ease-Out cho quân cờ di chuyển và Alpha Fade-out cho quân bị ăn.
  * - UC3.8: Trì hoãn hiển thị Dialog thắng cuộc chờ kết thúc hoạt ảnh động để tránh xung đột luồng.
+ *
+ * KIEN TRUC:
+ * - Master Loop: javax.swing.Timer(16ms ~ 60FPS) điều khiển pulseAlpha, slideProgress, captureFadeAlpha
+ * - State Machine: IDLE → SLIDING → CAPTURE_FADING → COMPLETE
+ * - Anti-spam: Double Lock (isAnimating + aiThinking) chặn mọi click khi đang bận
+ * - Thread Safety: AI chạy trên Thread riêng, giao tiếp UI qua SwingUtilities.invokeLater()
+ */
+
+/**
+ * UC7.1 (Save), UC7.2 (Load), UC7.3 (History)
+ * Người thực hiện: Nguyễn Trần Xuân Đào
+ * Ngày thực hiện chỉnh sửa: 07/06/2026
+ * Mô tả: 
+ * Thêm field historyPanel + constructor nhận HistoryPanel
+ * Thêm refreshHistoryPanel() gọi sau MỖI controller.makeMove() trong handleClick / handleClick1 / handleClick3 / handleClick4
+ * Thêm onSaveClicked(), onLoadClicked(), onSaveAsClicked(), onLoadFromFileClicked(), onExportHistoryClicked() (UC7.1/7.2/7.3)
+ * Giữ nguyên: toàn bộ handleClick logic gốc (depth, delay, sync/async)
  */
 
 public class GameView extends JPanel {
@@ -54,6 +74,8 @@ public class GameView extends JPanel {
 
     private final int CELL = 70;
 
+    private HistoryPanel historyPanel;
+
     public int currentChoice = 4;
     private boolean aiThinking = false;
 
@@ -65,19 +87,35 @@ public class GameView extends JPanel {
     private Rectangle pauseBtnRect = new Rectangle(10, 8, 80, 24);
     private Rectangle exitBtnRect = new Rectangle(8 * 70 - 90, 8, 80, 24);
 
-    // Bien trang thai animation
+    // ============================================================
+    // BIEN TRANG THAI ANIMATION ENGINE (UC3.3, UC3.7)
+    // ============================================================
+    // [UC3.3] Master Timer 60 FPS - Điều khiển toàn bộ vòng lặp UI
     private Timer uiMasterTimer;
+    // [UC3.3] pulseAlpha dao động [0.25, 0.75] - Hiệu ứng mạch đập (Breathing Pulse)
     private float pulseAlpha = 0.4f;
-    private boolean pulseGrowing = true;
+    private boolean pulseGrowing = true;  // Hướng biến thiên của pulseAlpha
 
+    // [UC3.7] Cờ khóa tương tác khi animation đang chạy (chống spam click)
     private boolean isAnimating = false;
+    // [UC3.7] Nước đi đang được animate (lưu tọa độ from, to, captures)
     private Move activeAnimatingMove = null;
+    // [UC3.7] Tiến độ trượt 0.0 → 1.0 (Phase 1: SLIDE)
     private double slideProgress = 0.0;
+    // [UC3.7] Độ mờ quân bị ăn 1.0 → 0.0 (Phase 2: FADE)
     private double captureFadeAlpha = 1.0;
+    // [UC3.7, UC3.8] Callback được gọi sau khi animation kết thúc
+    // -> gọi controller.makeMove() + checkWinner() + showWinDialog()
     private Runnable postAnimCallback = null;
 
     public GameView(GameController controller) {
+        this(controller, null);
+    }
+
+    public GameView(GameController controller, HistoryPanel historyPanel) {
         this.controller = controller;
+        this.historyPanel = historyPanel; // Gán HistoryPanel từ constructor
+
         loadImages();
 
         setPreferredSize(new Dimension(8 * CELL, 8 * CELL + INFO_PANEL_HEIGHT));
@@ -143,58 +181,94 @@ public class GameView extends JPanel {
         });
     }
 
-    // Master UI loop engine
+    // ============================================================
+    // [CORE] Master UI Loop Engine - Trái tim của toàn bộ phân hệ UI
+    // ============================================================
+    // Chạy ở 60 FPS (16ms/frame), xử lý:
+    //   1. [UC3.3] Cập nhật pulseAlpha (hiệu ứng mạch đập)
+    //   2. [UC3.7] Cập nhật slideProgress (trượt quân) và captureFadeAlpha (mờ quân bị ăn)
+    //   3. Gọi repaint() để vẽ lại toàn bộ giao diện
+    // ============================================================
+    // [UC3.3 - Buoc 1] Mỗi 16ms, uiMasterTimer tick → gọi ActionListener
     private void initAnimationEngine() {
         uiMasterTimer = new Timer(16, e -> {
-            // 1. Xử lý nhịp đập mờ ảo (Pulse) cho phần Highlight ô cờ
+            // ===== [UC3.3] Pulse Breathing Alpha (các bước 2-6) =====
+            // [UC3.3 - Buoc 2] Nếu pulseGrowing == true: pulseAlpha += 0.025f
             if (pulseGrowing) {
                 pulseAlpha += 0.025f;
+                // [UC3.3 - Buoc 3] Nếu pulseAlpha >= 0.75f: gán pulseAlpha = 0.75f; pulseGrowing = false
                 if (pulseAlpha >= 0.75f) { pulseAlpha = 0.75f; pulseGrowing = false; }
             } else {
+                // [UC3.3 - Buoc 4] Nếu pulseGrowing == false: pulseAlpha -= 0.025f
                 pulseAlpha -= 0.025f;
+                // [UC3.3 - Buoc 5] Nếu pulseAlpha <= 0.25f: gán pulseAlpha = 0.25f; pulseGrowing = true
                 if (pulseAlpha <= 0.25f) { pulseAlpha = 0.25f; pulseGrowing = true; }
             }
 
-            // 2. Xử lý tịnh tiến Slide và hiệu ứng biến mất của quân cờ
+            // ===== [UC3.7] Slide & Fade Animation (xem chi tiết bên dưới) =====
             if (isAnimating) {
+                // [UC3.7 - Phase 1 - Buoc 6] Mỗi Timer tick: slideProgress += 0.08 (0.0 → 1.0)
                 if (slideProgress < 1.0) {
-                    slideProgress += 0.08; // Tốc độ trượt di chuyển quân
+                    slideProgress += 0.08;
                     if (slideProgress >= 1.0) {
                         slideProgress = 1.0;
+                        // [UC3.7 - Buoc 10] slideProgress >= 1.0 → chuyển sang Phase 2 (FADE)
                     }
+                // [UC3.7 - Phase 2 - Buoc 11] Mỗi Timer tick: captureFadeAlpha -= 0.12 (1.0 → 0.0)
                 } else if (captureFadeAlpha > 0.0) {
-                    captureFadeAlpha -= 0.12; // Tốc độ mờ dần khi ăn quân đối phương
+                    captureFadeAlpha -= 0.12;
                     if (captureFadeAlpha <= 0.0) {
+                        // [UC3.7 - Buoc 13] captureFadeAlpha <= 0.0 → isAnimating = false (MỞ khóa)
                         captureFadeAlpha = 0.0;
                         isAnimating = false;
-                        // Hoàn tất hoạt ảnh -> Thực thi đổi trạng thái trên Board
+                        // [UC3.7 - Buoc 14] Gọi SwingUtilities.invokeLater(postAnimCallback)
                         if (postAnimCallback != null) {
                             SwingUtilities.invokeLater(postAnimCallback);
                         }
                     }
                 }
             }
+            // [UC3.3 - Buoc 6] Gọi repaint() → drawHighlights() dùng pulseAlpha làm alpha
             repaint();
         });
         uiMasterTimer.start();
     }
 
-    //Hàm đánh chặn nước đi để kích hoạt hoạt ảnh trước khi lưu vào Board
+    // ============================================================
+    // [UC3.7] Kích hoạt Animation trước khi cập nhật Board
+    // ============================================================
+    // Đây là phương thức đánh chặn (Interceptor) quan trọng:
+    // Thay vì gọi controller.makeMove() ngay lập tức, chúng ta:
+    //   1. Lưu nước đi vào activeAnimatingMove
+    //   2. Reset slideProgress = 0.0, captureFadeAlpha = 1.0
+    //   3. Bật cờ isAnimating = true (khóa tương tác)
+    //   4. Lưu callback vào postAnimCallback
+    //   5. Timer sẽ tự động chạy animation → kết thúc → gọi callback
+    //   6. Trong callback: controller.makeMove() + onCompleteAction.run()
+    // ============================================================
+    // [UC3.7 - Buoc 1] Người chơi chọn ô đích → findMove(r,c) trả về Move → executeMoveWithAnimation(chosen, callback)
     private void executeMoveWithAnimation(Move chosen, Runnable onCompleteAction) {
         if (chosen == null) return;
-        this.activeAnimatingMove = chosen;
-        this.slideProgress = 0.0;
-        this.captureFadeAlpha = 1.0;
-        this.isAnimating = true;
+        // [UC3.7 - Buoc 3] Lưu activeAnimatingMove = chosen; Reset slideProgress = 0.0; captureFadeAlpha = 1.0
+        this.activeAnimatingMove = chosen;     // Lưu nước đi cần animate
+        this.slideProgress = 0.0;              // Bắt đầu: chưa trượt (Phase 1 SLIDE)
+        this.captureFadeAlpha = 1.0;            // Bắt đầu: chưa mờ (Phase 2 FADE)
+        // [UC3.7 - Buoc 4] Bật isAnimating = true (KHÓA tương tác)
+        this.isAnimating = true;                // KHÓA tương tác người dùng
+        // [UC3.7 - Buoc 5] Tạo postAnimCallback: gọi controller.makeMove(chosen) + callback.run()
         this.postAnimCallback = () -> {
+            // [UC3.7 - Buoc 15] controller.makeMove(chosen) cập nhật Board SAU animation
             controller.makeMove(chosen);
+            // [UC3.7 - Buoc 16] callback.run() — check winner, AI move (nếu có)
             if (onCompleteAction != null) {
                 onCompleteAction.run();
             }
         };
     }
 
-    // Load Anh
+    // ===============================================================================
+    // [UC3.5 - Buoc 1] Load 4 ảnh PNG từ resource: white.png, black.png, whiteking.png, blackking.png
+    // ===============================================================================
     private void loadImages() {
         try {
             whiteImg = ImageIO.read(getClass().getResource("/img/white.png"));
@@ -212,8 +286,15 @@ public class GameView extends JPanel {
 
         if (selectedRow == -1 || (p != null && p.isWhite == controller.isWhiteTurn())) {
             if (p != null && p.isWhite == controller.isWhiteTurn()) {
+                List<Move> moves = controller.getValidMoves(r, c);
+                // [UC5.2] Bat buoc an: neu co nuoc an tren ban, chi chon quan co the an
+                if (controller.hasCaptureMoves(controller.isWhiteTurn()) && 
+                    (moves.isEmpty() || !moves.get(0).isCapture())) {
+                    repaint();
+                    return;
+                }
                 selectedRow = r; selectedCol = c;
-                possibleMoves = controller.getValidMoves(r, c);
+                possibleMoves = moves;
             }
             repaint();
             return;
@@ -221,6 +302,10 @@ public class GameView extends JPanel {
 
         Move chosen = findMove(r, c);
         if (chosen == null) { repaint(); return; }
+
+        // Thực hiện nước đi của người chơi
+        controller.makeMove(chosen);
+        refreshHistoryPanel(); // UC7.3 – cập nhật lịch sử sau nước người chơi
 
         // Chạy hiệu ứng trượt quân của Người chơi
         executeMoveWithAnimation(chosen, () -> {
@@ -243,6 +328,8 @@ public class GameView extends JPanel {
                     SwingUtilities.invokeLater(() -> {
                         // Chạy hiệu ứng trượt quân của AI dữ liệu máy tính
                         executeMoveWithAnimation(aiMove, () -> {
+                            controller.makeMove(aiMove);
+                            refreshHistoryPanel(); // UC7.3 – cập nhật lịch sử sau nước AI
                             Winner winner1 = controller.checkWinner(controller.getBoard());
                             if (winner1 != Winner.NONE) showWinDialog(winner1);
                             aiThinking = false;
@@ -262,8 +349,15 @@ public class GameView extends JPanel {
 
         if (selectedRow == -1 || (p != null && p.isWhite == controller.isWhiteTurn())) {
             if (p != null && p.isWhite == controller.isWhiteTurn()) {
+                List<Move> moves = controller.getValidMoves(r, c);
+                // [UC5.2] Bat buoc an: neu co nuoc an tren ban, chi chon quan co the an
+                if (controller.hasCaptureMoves(controller.isWhiteTurn()) && 
+                    (moves.isEmpty() || !moves.get(0).isCapture())) {
+                    repaint();
+                    return;
+                }
                 selectedRow = r; selectedCol = c;
-                possibleMoves = controller.getValidMoves(r, c);
+                possibleMoves = moves;
             }
             repaint();
             return;
@@ -271,6 +365,11 @@ public class GameView extends JPanel {
 
         Move chosen = findMove(r, c);
         if (chosen == null) { repaint(); return; }
+
+        
+        // Thực hiện nước đi của người chơi
+        controller.makeMove(chosen);
+        refreshHistoryPanel(); // UC7.3 – cập nhật lịch sử sau nước người chơi
 
         executeMoveWithAnimation(chosen, () -> {
             Winner winner = controller.checkWinner(controller.getBoard());
@@ -304,8 +403,15 @@ public class GameView extends JPanel {
 
         if (selectedRow == -1 || (p != null && p.isWhite == controller.isWhiteTurn())) {
             if (p != null && p.isWhite == controller.isWhiteTurn()) {
+                List<Move> moves = controller.getValidMoves(r, c);
+                // [UC5.2] Bat buoc an: neu co nuoc an tren ban, chi chon quan co the an
+                if (controller.hasCaptureMoves(controller.isWhiteTurn()) && 
+                    (moves.isEmpty() || !moves.get(0).isCapture())) {
+                    repaint();
+                    return;
+                }
                 selectedRow = r; selectedCol = c;
-                possibleMoves = controller.getValidMoves(r, c);
+                possibleMoves = moves;
             }
             repaint();
             return;
@@ -313,6 +419,11 @@ public class GameView extends JPanel {
 
         Move chosen = findMove(r, c);
         if (chosen == null) { repaint(); return; }
+
+        
+        // Thực hiện nước đi của người chơi
+        controller.makeMove(chosen);
+        refreshHistoryPanel(); // UC7.3 – cập nhật lịch sử sau nước người chơi
 
         executeMoveWithAnimation(chosen, () -> {
             Winner winner = controller.checkWinner(controller.getBoard());
@@ -333,6 +444,8 @@ public class GameView extends JPanel {
                 if (aiMove != null) {
                     SwingUtilities.invokeLater(() -> {
                         executeMoveWithAnimation(aiMove, () -> {
+                             controller.makeMove(aiMove);
+                             refreshHistoryPanel(); // UC7.3 – cập nhật lịch sử sau nước đi AI
                             Winner winner1 = controller.checkWinner(controller.getBoard());
                             if (winner1 != Winner.NONE) showWinDialog(winner1);
                             aiThinking = false;
@@ -353,8 +466,15 @@ public class GameView extends JPanel {
 
         if (selectedRow == -1 || (p != null && p.isWhite == controller.isWhiteTurn())) {
             if (p != null && p.isWhite == controller.isWhiteTurn()) {
+                List<Move> moves = controller.getValidMoves(r, c);
+                // [UC5.2] Bat buoc an: neu co nuoc an tren ban, chi chon quan co the an
+                if (controller.hasCaptureMoves(controller.isWhiteTurn()) && 
+                    (moves.isEmpty() || !moves.get(0).isCapture())) {
+                    repaint();
+                    return;
+                }
                 selectedRow = r; selectedCol = c;
-                possibleMoves = controller.getValidMoves(r, c);
+                possibleMoves = moves;
             }
             repaint();
             return;
@@ -362,6 +482,11 @@ public class GameView extends JPanel {
 
         Move chosen = findMove(r, c);
         if (chosen == null) { repaint(); return; }
+
+        
+        // Thực hiện nước đi của người chơi
+        controller.makeMove(chosen);
+        refreshHistoryPanel(); // UC7.3 – cập nhật lịch sử sau nước người chơi
 
         executeMoveWithAnimation(chosen, () -> {
             Winner winner = controller.checkWinner(controller.getBoard());
@@ -395,6 +520,7 @@ public class GameView extends JPanel {
 
         if (aiMove != null) {
             controller.makeMove(aiMove);
+            refreshHistoryPanel(); // UC7.3 – cập nhật lịch sử sau nước đi AI
         }
 
         aiThinking = false;
@@ -424,6 +550,7 @@ public class GameView extends JPanel {
             if (aiMove != null) {
                 SwingUtilities.invokeLater(() -> {
                     controller.makeMove(aiMove);
+                    refreshHistoryPanel(); // UC7.3 – cập nhật lịch sử sau nước đi AI
                     aiThinking = false;
                     repaint();
                 });
@@ -432,6 +559,180 @@ public class GameView extends JPanel {
             }
 
         }).start();
+    }
+
+    // ─── UC7.3 – REFRESH HISTORY PANEL ───────────────────────────────────────
+ 
+    /**
+     * UC7.3 – Cập nhật HistoryPanel sau mỗi nước đi (cả người chơi lẫn AI).
+     * An toàn khi historyPanel == null (backward compatible với constructor cũ).
+     *
+     * @param –  không có tham số; lấy dữ liệu từ controller.getHistoryManager()
+     *
+     * ĐƯỢC GỌI BỞI: handleClick, handleClick1, handleClick3, handleClick4,
+     *               alphaBetaVsMiniMax, ABVsAB (sau controller.makeMove)
+     * TRẢ VỀ: void
+     */
+    private void refreshHistoryPanel() {
+        if (historyPanel == null) return;
+        MoveHistoryManager hm = controller.getHistoryManager();
+        historyPanel.updateHistory(hm.getRecords());
+    }
+ 
+    // ─── UC7.1 – SAVE GAME ───────────────────────────────────────────────────
+ 
+    /**
+     * UC7.1 – Lưu game vào file mặc định "checkers_save.dat".
+     * Được gọi khi người dùng nhấn nút "Lưu game" trong toolbar (Main).
+     *
+     * LUỒNG XỬ LÝ:
+     *   GameView → controller.saveGame()
+     *           → SaveLoadManager.saveGame(whiteTurn, board, notations)
+     *           → new GameState(...) → ObjectOutputStream → file .dat
+     *   → JOptionPane thông báo kết quả
+     *
+     * ĐƯỢC GỌI BỞI: Main.buildToolBar() → btnSave.addActionListener
+     */
+    public void onSaveClicked() {
+        boolean ok = controller.saveGame();
+        if (ok) {
+            JOptionPane.showMessageDialog(this,
+                    "Đã lưu game vào: " + SaveLoadManager.DEFAULT_SAVE_PATH,
+                    "Lưu thành công", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            JOptionPane.showMessageDialog(this,
+                    "Lỗi khi lưu game! Kiểm tra quyền ghi file.",
+                    "Lỗi lưu game", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+ 
+    /**
+     * UC7.1 – Lưu game "Save As..." – người dùng chọn đường dẫn bằng JFileChooser.
+     * ĐƯỢC GỌI BỞI: Main.buildToolBar() → btnSaveAs.addActionListener
+     */
+    public void onSaveAsClicked() {
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("Lưu game As...");
+        fc.setFileFilter(new FileNameExtensionFilter("Checkers Save (*.dat)", "dat"));
+        fc.setSelectedFile(new File("checkers_save.dat"));
+ 
+        if (fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            String path = fc.getSelectedFile().getAbsolutePath();
+            if (!path.endsWith(".dat")) path += ".dat";
+            boolean ok = controller.saveGame(path);
+            JOptionPane.showMessageDialog(this,
+                    ok ? "Đã lưu: " + path : "Lỗi khi lưu file!",
+                    "Lưu game",
+                    ok ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.ERROR_MESSAGE);
+        }
+    }
+ 
+    // ─── UC7.2 – LOAD GAME ───────────────────────────────────────────────────
+ 
+    /**
+     * UC7.2 – Tải game từ file mặc định "checkers_save.dat".
+     * Được gọi khi người dùng nhấn nút "Tải game" trong toolbar (Main).
+     *
+     * LUỒNG XỬ LÝ:
+     *   GameView → controller.loadGame()
+     *           → SaveLoadManager.loadGame() → ObjectInputStream → GameState
+     *           → state.toBoard() → cập nhật board, whiteTurn, historyManager
+     *   → refreshHistoryPanel() → repaint()
+     *   → JOptionPane thông báo kết quả
+     *
+     * ĐƯỢC GỌI BỞI: Main.buildToolBar() → btnLoad.addActionListener
+     */
+    public void onLoadClicked() {
+        if (!SaveLoadManager.defaultSaveExists()) {
+            JOptionPane.showMessageDialog(this,
+                    "Chưa có file save! Hãy lưu game trước.",
+                    "Không tìm thấy file", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+ 
+        String info = SaveLoadManager.getSaveFileInfo(SaveLoadManager.DEFAULT_SAVE_PATH);
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Tải game đã lưu?\n" + info,
+                "Xác nhận tải game", JOptionPane.YES_NO_OPTION);
+        if (confirm != JOptionPane.YES_OPTION) return;
+ 
+        boolean ok = controller.loadGame();
+        if (ok) {
+            selectedRow = selectedCol = -1;
+            possibleMoves.clear();
+            refreshHistoryPanel(); // UC7.3: khôi phục lịch sử
+            repaint();
+            JOptionPane.showMessageDialog(this,
+                    "Đã tải game thành công!",
+                    "Tải game", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            JOptionPane.showMessageDialog(this,
+                    "Lỗi khi đọc file! File có thể bị hỏng.",
+                    "Lỗi tải game", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+ 
+    /**
+     * UC7.2 – Tải game từ file tùy chọn bằng JFileChooser.
+     * ĐƯỢC GỌI BỞI: Main.buildToolBar() → btnLoadFile.addActionListener
+     */
+    public void onLoadFromFileClicked() {
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("Chọn file save...");
+        fc.setFileFilter(new FileNameExtensionFilter("Checkers Save (*.dat)", "dat"));
+ 
+        if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            String path = fc.getSelectedFile().getAbsolutePath();
+            boolean ok  = controller.loadGame(path);
+            if (ok) {
+                selectedRow = selectedCol = -1;
+                possibleMoves.clear();
+                refreshHistoryPanel();
+                repaint();
+                JOptionPane.showMessageDialog(this,
+                        "Đã tải: " + path,
+                        "Tải game", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Lỗi đọc file: " + path,
+                        "Lỗi", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+ 
+    // ─── UC7.3 – EXPORT HISTORY ──────────────────────────────────────────────
+ 
+    /**
+     * UC7.3 – Xuất toàn bộ lịch sử nước đi ra file .txt.
+     * Người dùng chọn nơi lưu bằng JFileChooser.
+     * ĐƯỢC GỌI BỞI: Main.buildToolBar() → btnExport.addActionListener
+     */
+    public void onExportHistoryClicked() {
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("Xuất lịch sử nước đi...");
+        fc.setFileFilter(new FileNameExtensionFilter("Text file (*.txt)", "txt"));
+        fc.setSelectedFile(new File("checkers_history.txt"));
+ 
+        if (fc.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+ 
+        String path = fc.getSelectedFile().getAbsolutePath();
+        if (!path.endsWith(".txt")) path += ".txt";
+ 
+        java.util.List<String> notations = controller.getHistoryNotations();
+        try (java.io.PrintWriter pw = new java.io.PrintWriter(path, "UTF-8")) {
+            pw.println("=== LICH SU VAN CO DAM ===");
+            pw.println("Tong so nuoc: " + notations.size());
+            pw.println("------------------------------");
+            for (String line : notations) pw.println(line);
+            pw.println("------------------------------");
+            JOptionPane.showMessageDialog(this,
+                    "Da xuat lich su ra:\n" + path,
+                    "Xuat lich su", JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this,
+                    "Loi khi xuat file: " + e.getMessage(),
+                    "Loi", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private Move findMove(int r, int c) {
@@ -443,6 +744,15 @@ public class GameView extends JPanel {
     }
 
     // UC1.9.6 - Lấy chuỗi hiển thị thông tin lượt đi hiện tại
+    /*
+     * UC1.9 - Xac dinh nguoi di truoc
+     * Lay chuoi hien thi thong tin luot di hien tai
+     * 
+     * [UC3.4 - Buoc 3] getTurnText() lấy text:
+     *   - Nếu isPaused: "GAME DANG TAM DUNG"
+     *   - Nếu White turn: "Luot di: Trang (White)"
+     *   - Nếu Black turn: "Luot di: Den (Black)"
+     */
     private String getTurnText() {
         if (isPaused) {
             return "GAME DANG TAM DUNG";
@@ -457,11 +767,13 @@ public class GameView extends JPanel {
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        // UC1.9: Ve thong tin luot o phia tren
+        // [UC3.4 - Buoc 1] paintComponent() được gọi → g2d.translate + drawTurnInfo(g)
         drawTurnInfo(g);
         // UC1.9.6: Vẽ bàn cờ (dịch xuống dưới phần thông tin lượt)
         Graphics2D g2d = (Graphics2D) g.create();
+        // [UC3.1 - Buoc 1] translate(0, INFO_PANEL_HEIGHT) để dịch xuống dưới thanh trạng thái
         g2d.translate(0, INFO_PANEL_HEIGHT);
+        // [UC3.1 - Buoc 2] Gọi drawBoard(g2d) — bắt đầu vẽ bàn cờ
         drawBoard(g2d);
         drawPieces(g2d);
         drawHighlights(g2d);
@@ -469,14 +781,23 @@ public class GameView extends JPanel {
     }
 
     // UC1.9.6 - Vẽ thông tin lượt đi hiện tại ở phía trên cùng bàn cờ
+    /*
+     * UC1.9 - Xac dinh nguoi di truoc
+     * Ve thong tin luot di hien tai o phia tren cung
+     * 
+     * [UC3.4] Thông báo lượt chơi (White/Black turn) trên thanh trạng thái
+     * - Phối hợp với UC3.8 để hiển thị kết quả khi ván đấu kết thúc
+     * - Font Arial Bold 14, khử răng cưa (ANTIALIASING)
+     */
     private void drawTurnInfo(Graphics g) {
-        // Background cho phan thong tin
+        // [UC3.4 - Buoc 2] Vẽ nền thanh + text lượt + nút trên panel
         g.setColor(new Color(50, 50, 50));
         g.fillRect(0, 0, getWidth(), INFO_PANEL_HEIGHT);
 
-        // Van ban thong tin luot
+        // [UC3.4 - Buoc 4] Vẽ text căn giữa, font Arial Bold 14, màu trắng, khử răng cưa (ANTIALIASING)
         g.setColor(Color.WHITE);
         g.setFont(new Font("Arial", Font.BOLD, 14));
+        // [UC3.4 - Buoc 3] getTurnText() lấy text: "Luot di: Trang (White)" hoặc "Luot di: Den (Black)"
         String text = getTurnText();
         FontMetrics fm = g.getFontMetrics();
         int x = (getWidth() - fm.stringWidth(text)) / 2;
@@ -507,13 +828,23 @@ public class GameView extends JPanel {
     }
 
     // ===============================================================================
-    // UC3.1 - Hien thi ban co
+    // [UC3.1] Hien thi ban co - Bảng màu gỗ Mahogany cao cấp
+    // ===============================================================================
+    // [UC3.1 - Buoc 1-2] paintComponent() → g2d.translate(0, INFO_PANEL_HEIGHT) → drawBoard(g2d)
+    // Duyệt ma trận 8×8, xác định ô sáng/tối qua công thức (r + c) % 2 == 1
+    // - Ô tối (isDark == true):  màu gỗ Mahogany (110, 80, 50)
+    // - Ô sáng (isDark == false): màu kem tự nhiên (240, 220, 170)
+    // CELL = 70px - đủ lớn để click chính xác
     // ===============================================================================
     private void drawBoard(Graphics g) {
+        // [UC3.1 - Buoc 3] Duyệt vòng lặp lồng 8×8: for r in 0..7, for c in 0..7
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
+                // [UC3.1 - Buoc 4] Tính isDark = (r + c) % 2 == 1 để xác định ô sáng/tối
                 boolean isDark = (r + c) % 2 == 1;
+                // [UC3.1 - Buoc 5-6] isDark==true: màu gỗ Mahogany (110,80,50); isDark==false: màu kem (240,220,170)
                 g.setColor(isDark ? new Color(110, 80, 50) : new Color(240, 220, 170));
+                // [UC3.1 - Buoc 7] Vẽ ô hình chữ nhật fillRect(c*CELL, r*CELL, CELL, CELL)
                 g.fillRect(c * CELL, r * CELL, CELL, CELL);
             }
         }
@@ -546,67 +877,99 @@ public class GameView extends JPanel {
     }
 
     // ===============================================================================
-    // UC3.5 & UC3.7 - Vẽ quân cờ (Vua/Thường) & Xử lý Hoạt ảnh Di chuyển / Ăn quân mờ dần
+    // [UC3.5] Vẽ quân cờ (Vua/Thường) + [UC3.7] Hoạt ảnh Di chuyển & Ăn quân
+    // ===============================================================================
+    // UC3.5:
+    //   - Chọn ảnh phù hợp: white/black cho quân thường, whiteKing/blackKing cho Vua
+    //   - Kỹ thuật Drop-Shadow 3D: vẽ bóng đổ (0,0,0,60) lệch 5px dưới quân cờ
+    //   - Tạo hiệu ứng nổi khối mà không cần thư viện 3D
+    //
+    // UC3.7 (Phase 1 - SLIDE):
+    //   - Bỏ qua ô xuất phát (skipRow, skipCol)
+    //   - Tính tọa độ nội suy với Cubic Ease-Out: easeProgress = 1 - (1-t)^3
+    //   - Vẽ quân tại vị trí nội suy (curX, curY) có bóng đổ đậm hơn (0,0,0,80)
+    //
+    // UC3.7 (Phase 2 - FADE):
+    //   - Quân bị ăn được vẽ với AlphaComposite.SRC_OVER có alpha = captureFadeAlpha
+    //   - captureFadeAlpha giảm từ 1.0 → 0.0, quân tan biến dần
     // ===============================================================================
     private void drawPieces(Graphics g) {
         Graphics2D g2d = (Graphics2D) g.create();
         Board board = controller.getBoard();
 
+        // [UC3.7] Bỏ qua ô xuất phát (quân đang trượt) và lưu danh sách quân bị ăn
         int skipRow = -1, skipCol = -1;
         List<Point> capturedPoints = new ArrayList<>();
 
         if (isAnimating && activeAnimatingMove != null) {
-            skipRow = activeAnimatingMove.from().y;
+            skipRow = activeAnimatingMove.from().y;        // Ô quân đang rời đi
             skipCol = activeAnimatingMove.from().x;
-            capturedPoints = activeAnimatingMove.captures;
+            capturedPoints = activeAnimatingMove.captures;  // Danh sách quân bị ăn
         }
 
-        // UC3.5: Vẽ các quân cờ tĩnh kết hợp bóng đổ Drop-Shadow tạo khối 3D
+        // === [UC3.5] Vẽ các quân cờ tĩnh (trừ quân đang chạy) ===
+        // [UC3.5 - Buoc 2] Duyệt từng ô (r,c) trên bàn cờ 8×8
         for (int r = 0; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
+                // [UC3.5 - Buoc 3] Bỏ qua ô đang có quân chạy animation (nếu có)
                 if (r == skipRow && c == skipCol) continue;
 
+                // [UC3.5 - Buoc 4] Lấy Piece p tại (r,c), nếu null thì bỏ qua
                 Piece p = board.getPiece(r, c);
                 if (p == null) continue;
 
+                // [UC3.5 - Buoc 5] Chọn ảnh dựa trên loại quân (Thường/Vua) và màu (Trắng/Đen):
+                //   p.isWhite && !p.isKing → whiteImg
+                //   p.isWhite &&  p.isKing → whiteKingImg
+                //   !p.isWhite && !p.isKing → blackImg
+                //   !p.isWhite &&  p.isKing → blackKingImg
                 BufferedImage img = p.isWhite ? (p.isKing ? whiteKingImg : whiteImg)
                         : (p.isKing ? blackKingImg : blackImg);
 
                 g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
 
-                // UC3.7: Kiểm tra nếu ô này chứa quân bị ăn -> Thực hiện hoạt ảnh mờ dần Fade out
+                // [UC3.7 - Phase 2 - Buoc 12] Nếu quân đang bị ăn → AlphaComposite với captureFadeAlpha
                 if (isAnimating && capturedPoints.contains(new Point(c, r))) {
                     g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, (float) captureFadeAlpha));
                 }
 
+                // [UC3.5 - Buoc 6] Bóng đổ Drop-Shadow: fillOval lệch 5px dưới quân, alpha 60/255
                 g2d.setColor(new Color(0, 0, 0, 60));
                 g2d.fillOval(c * CELL + 8, r * CELL + 11, CELL - 16, CELL - 16);
 
+                // [UC3.5 - Buoc 7] Vẽ ảnh quân cờ chính: drawImage căn giữa ô, kích thước CELL-12
                 g2d.drawImage(img, c * CELL + 6, r * CELL + 6, CELL - 12, CELL - 12, null);
             }
         }
 
-        // UC3.7: Thực hiện nội suy tọa độ trượt (Cubic Ease-Out) cho quân cờ đang chạy
+        // === [UC3.7 - Phase 1] Vẽ quân cờ đang chạy với Cubic Ease-Out ===
+        // [UC3.7 - Buoc 6-9] Phase 1: SLIDE (Cubic Ease-Out, ~0.2s)
         if (isAnimating && activeAnimatingMove != null) {
-            int fr = activeAnimatingMove.from().y;
-            int fc = activeAnimatingMove.from().x;
-            int tr = activeAnimatingMove.to().y;
-            int tc = activeAnimatingMove.to().x;
+            // Lấy tọa độ xuất phát và đích
+            int fr = activeAnimatingMove.from().y;  // Hàng xuất phát
+            int fc = activeAnimatingMove.from().x;  // Cột xuất phát
+            int tr = activeAnimatingMove.to().y;    // Hàng đích
+            int tc = activeAnimatingMove.to().x;    // Cột đích
 
             Piece movingPiece = board.getPiece(fr, fc);
             if (movingPiece != null) {
                 BufferedImage img = movingPiece.isWhite ? (movingPiece.isKing ? whiteKingImg : whiteImg)
                         : (movingPiece.isKing ? blackKingImg : blackImg);
 
+                // [UC3.7 - Buoc 7] Công thức Cubic Ease-Out: easeProgress = 1 - (1-t)^3, chậm dần về cuối
+                // easeProgress = 0.0 → 0.488 → 0.875 → 0.992 → 1.0
                 double easeProgress = 1.0 - Math.pow(1.0 - slideProgress, 3);
 
+                // [UC3.7 - Buoc 8] Nội suy tọa độ từ (fc, fr) đến (tc, tr)
                 int curX = (int) (fc * CELL + (tc - fc) * CELL * easeProgress);
                 int curY = (int) (fr * CELL + (tr - fr) * CELL * easeProgress);
 
                 g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
+                // [UC3.7 - Buoc 9] Bóng đổ cho quân đang chạy (đậm hơn: alpha 80)
                 g2d.setColor(new Color(0, 0, 0, 80));
                 g2d.fillOval(curX + 8, curY + 11, CELL - 16, CELL - 16);
 
+                // Vẽ ảnh quân tại vị trí nội suy
                 g2d.drawImage(img, curX + 6, curY + 6, CELL - 12, CELL - 12, null);
             }
         }
@@ -614,15 +977,32 @@ public class GameView extends JPanel {
     }
 
     // ===============================================================================
-    // UC3.8 - Thông báo kết quả trận đấu
+    // [UC3.8] Thông báo kết quả trận đấu (Deferred Dialog)
     // ===============================================================================
+    // Đặc điểm quan trọng: Dialog này KHÔNG được gọi ngay khi phát hiện người thắng.
+    // Thay vào đó, nó được gọi TRONG postAnimCallback, tức là SAU KHI animation
+    // kết thúc. Điều này tránh xung đột luồng (EDT) và đảm bảo:
+    //   1. Animation SLIDE + FADE chạy hoàn chỉnh
+    //   2. controller.makeMove() cập nhật Board
+    //   3. controller.checkWinner() kiểm tra điều kiện thắng
+    //   4. showWinDialog() hiển thị kết quả
+    // ===============================================================================
+    // [UC3.8 - Buoc 1] Animation kết thúc → postAnimCallback.run() được gọi
+    // [UC3.8 - Buoc 2] controller.makeMove(chosen) cập nhật Board (xử lý trong postAnimCallback)
+    // [UC3.8 - Buoc 3] controller.checkWinner(controller.getBoard()) — gọi trước khi vào đây
+    // [UC3.8 - Buoc 4-5] Kiểm tra winner: WHITE → "Quan TRANG...", BLACK → "Quan DEN..."
     public void showWinDialog(Winner winner) {
-        String message = (winner == Winner.WHITE) ? "Quan TRANG da gianh chien thang!" : "Quan DEN da gianh chien thang!";
+        // [UC3.8 - Buoc 6] Nếu winner == Winner.NONE: không hiển thị gì, game tiếp tục
+        String message = (winner == Winner.WHITE) 
+            ? "Quan TRANG da gianh chien thang!" 
+            : "Quan DEN da gianh chien thang!";
+        // [UC3.8 - Buoc 7] Hiển thị JOptionPane.showMessageDialog với title "KET THUC TRAN DAU"
         JOptionPane.showMessageDialog(
                 this,
                 message,
                 "KET THUC TRAN DAU",
                 JOptionPane.INFORMATION_MESSAGE
         );
+        // [UC3.8 - Buoc 8] Người chơi nhấn OK → dialog đóng, trở về timer loop
     }
 }

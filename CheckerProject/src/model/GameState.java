@@ -4,6 +4,18 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
+/** 
+ * UC7.1 – Lưu trạng thái game
+ * UC7.2 – Load ván đang chơi 
+ * Người thực hiện: Nguyễn Trần Xuân Đào
+ * Ngày thực hiện chỉnh sửa: 04/06/2026
+ * Mô tả: Lưu trữ toàn bộ trạng thái một ván cờ tại một thời điểm. Dùng cho UC7.1 (Lưu) và UC7.2 (Load). Implements Serializable để Java ObjectOutputStream có thể ghi ra file nhị phân (.dat).
+ * Được tạo bởi  : SaveLoadManager.saveGame()
+ * Được đọc bởi  : SaveLoadManager.loadGame()
+ * Phụ thuộc vào : model.Board, model.Piece
+ * Cung cấp cho  : GameController (để khôi phục board + whiteTurn)
+ */
+
 public class GameState implements Serializable {
 
     /** serialVersionUID bắt buộc để đảm bảo tương thích khi deserialize */
