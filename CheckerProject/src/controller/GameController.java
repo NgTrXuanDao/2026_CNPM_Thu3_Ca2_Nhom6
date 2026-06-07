@@ -1,14 +1,13 @@
 package controller;
 
-import model.Board;
-import model.FirstTurnMode;
-import model.Move;
-import model.Piece;
-
 import java.awt.Point;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import model.Board;
+import model.FirstTurnMode;
+import model.Move;
+import model.Piece;
 
 /**
  * GameController: nắm Board, lượt (whiteTurn).
@@ -281,7 +280,84 @@ public class GameController {
         whiteTurn = !whiteTurn;
     }
 
-
+        // ─── UC7.1 – SAVE GAME ───────────────────────────────────────────────────
+ 
+    /**
+     * UC7.1 – Lưu trạng thái game hiện tại ra file mặc định.
+     * Delegate sang SaveLoadManager.saveGame().
+     *
+     * @return true nếu lưu thành công
+     *
+     * LUỒNG XỬ LÝ:
+     *   1. Lấy danh sách notation từ historyManager
+     *   2. Gọi SaveLoadManager.saveGame(whiteTurn, board, notations)
+     *   3. SaveLoadManager tạo GameState → ObjectOutputStream → file
+     *
+     * ĐƯỢC GỌI BỞI: GameView (khi người dùng nhấn nút "Lưu game")
+     */
+    public boolean saveGame() {
+        List<String> notations = historyManager.getNotations();
+        return SaveLoadManager.saveGame(whiteTurn, board, notations);
+    }
+ 
+    /**
+     * UC7.1 – Lưu game vào file chỉ định (dùng khi "Lưu As...").
+     * @param filePath Đường dẫn file đầu ra
+     * @return true nếu thành công
+     */
+    public boolean saveGame(String filePath) {
+        List<String> notations = historyManager.getNotations();
+        return SaveLoadManager.saveGame(whiteTurn, board, notations, filePath);
+    }
+ 
+    // ─── UC7.2 – LOAD GAME ───────────────────────────────────────────────────
+ 
+    /**
+     * UC7.2 – Tải trạng thái game từ file mặc định, cập nhật board + lượt + lịch sử.
+     *
+     * @return true nếu load thành công, false nếu file không tồn tại hoặc lỗi
+     *
+     * LUỒNG XỬ LÝ:
+     *   1. SaveLoadManager.loadGame() → đọc file → GameState object
+     *   2. GameState.toBoard() → Board mới với vị trí quân đã lưu
+     *   3. Khôi phục whiteTurn từ GameState
+     *   4. UC7.3: historyManager.restoreFromStrings() khôi phục lịch sử
+     *
+     * ĐƯỢC GỌI BỞI: GameView (khi người dùng nhấn nút "Tải game")
+     */
+    public boolean loadGame() {
+        GameState state = SaveLoadManager.loadGame();
+        if (state == null) return false;
+ 
+        this.board     = state.toBoard();    // UC7.2: khôi phục bàn cờ
+        this.whiteTurn = state.whiteTurn;    // UC7.2: khôi phục lượt đi
+ 
+        // UC7.3: khôi phục lịch sử nước đi
+        if (state.moveHistory != null) {
+            historyManager.restoreFromStrings(state.moveHistory);
+        } else {
+            historyManager.clear();
+        }
+ 
+        return true;
+    }
+ 
+    /**
+     * UC7.2 – Load từ file chỉ định.
+     * @param filePath Đường dẫn file
+     * @return true nếu thành công
+     */
+    public boolean loadGame(String filePath) {
+        GameState state = SaveLoadManager.loadGame(filePath);
+        if (state == null) return false;
+ 
+        this.board     = state.toBoard();
+        this.whiteTurn = state.whiteTurn;
+        if (state.moveHistory != null) historyManager.restoreFromStrings(state.moveHistory);
+        else historyManager.clear();
+        return true;
+    }
+    
     /**
      * - b: board hiện tại (đã được clone khi gọi ban đầu)
      * - curR,curC: vị trí hiện tại
