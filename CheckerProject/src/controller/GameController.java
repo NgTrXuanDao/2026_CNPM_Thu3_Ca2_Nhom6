@@ -188,6 +188,32 @@ public class GameController {
             }
         }
         return result;
+    }    //UC5.2 - Bắt buộc ăn quân nếu có thể
+    //UC5.4 - Chặn nước đi thường khi có thể ăn
+    /**
+     * Kiểm tra xem bên forWhite có ít nhất 1 quân có thể ăn không.
+     * Dùng ở GameView để chặn chọn quân không thể ăn khi có forced capture.
+     */
+    public boolean hasCaptureMoves(boolean forWhite) {
+        boolean oldTurn = whiteTurn;
+        whiteTurn = forWhite;
+        try {
+            for (int r = 0; r < 8; r++) {
+                for (int c = 0; c < 8; c++) {
+                    Piece p = board.getPiece(r, c);
+                    if (p != null && p.isWhite == forWhite) {
+                        List<Move> moves = getValidMoves(r, c);
+                        // getValidMoves chỉ trả capture nếu có, ngược lại trả normal moves
+                        if (!moves.isEmpty() && moves.get(0).isCapture()) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        } finally {
+            whiteTurn = oldTurn;
+        }
+        return false;
     }
 
     //UC5.2 - Bắt buộc ăn quân nếu có thể
