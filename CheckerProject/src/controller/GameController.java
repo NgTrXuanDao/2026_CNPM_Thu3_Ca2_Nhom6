@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Random;
 import model.Board;
 import model.FirstTurnMode;
+import model.GameState;
 import model.Move;
 import model.Piece;
 
@@ -24,6 +25,7 @@ import model.Piece;
 public class GameController {
     private  Board board;
     private boolean whiteTurn;
+    private MoveHistoryManager historyManager;
 
     /*
      * UC1.19 - Lập trạng thái / không ăn lâu → hòa
@@ -51,12 +53,14 @@ public class GameController {
     public GameController(Board board) {
         this.board = board;
         this.whiteTurn = true; // White bắt đầu (mặc định)
+        this.historyManager = new MoveHistoryManager();
     }
 
     /** Khởi tạo với lượt chỉ định */
     public GameController(Board board, boolean whiteTurn) {
 		this.board = board;
 		this.whiteTurn = whiteTurn;
+		this.historyManager = new MoveHistoryManager();
 	}
 
     /*
@@ -69,6 +73,7 @@ public class GameController {
         this.board = board;
         // Xác định whiteTurn dựa vào mode
         this.whiteTurn = resolveFirstTurn(mode);
+        this.historyManager = new MoveHistoryManager();
     }
 
     /*
@@ -114,6 +119,7 @@ public class GameController {
     public void resetGame(FirstTurnMode mode) {
         this.board.initialize(); // Khởi tạo lại bàn cờ
         this.noCaptureMoveCount = 0; // UC1.19: reset bộ đếm hòa
+        this.historyManager.clear(); // UC7.3: xóa lịch sử
         if (mode != null) {
             setFirstTurn(mode);  // Thiết lập lượt đi đầu
         }
@@ -121,6 +127,7 @@ public class GameController {
 
 	public Board getBoard() { return board; }
     public boolean isWhiteTurn() { return whiteTurn; }
+    public MoveHistoryManager getHistoryManager() { return historyManager; }
 
     /*
      * UC1.19 - Lập trạng thái / không ăn lâu → hòa
@@ -189,34 +196,6 @@ public class GameController {
         }
         return result;
     }    //UC5.2 - Bắt buộc ăn quân nếu có thể
-    //UC5.4 - Chặn nước đi thường khi có thể ăn
-    /**
-     * Kiểm tra xem bên forWhite có ít nhất 1 quân có thể ăn không.
-     * Dùng ở GameView để chặn chọn quân không thể ăn khi có forced capture.
-     */
-    public boolean hasCaptureMoves(boolean forWhite) {
-        boolean oldTurn = whiteTurn;
-        whiteTurn = forWhite;
-        try {
-            for (int r = 0; r < 8; r++) {
-                for (int c = 0; c < 8; c++) {
-                    Piece p = board.getPiece(r, c);
-                    if (p != null && p.isWhite == forWhite) {
-                        List<Move> moves = getValidMoves(r, c);
-                        // getValidMoves chỉ trả capture nếu có, ngược lại trả normal moves
-                        if (!moves.isEmpty() && moves.get(0).isCapture()) {
-                            return true;
-                        }
-                    }
-                }
-            }
-        } finally {
-            whiteTurn = oldTurn;
-        }
-        return false;
-    }
-
-    //UC5.2 - Bắt buộc ăn quân nếu có thể
     //UC5.4 - Chặn nước đi thường khi có thể ăn
     /**
      * Kiểm tra xem bên forWhite có ít nhất 1 quân có thể ăn không.
@@ -373,12 +352,14 @@ public class GameController {
     /*
      * UC1.2  - Di chuyển quân cờ
      * UC1.19 - Lập trạng thái / không ăn lâu → hòa
+     * UC7.3 - Xem lịch sử nước đi
      * Người thực hiện: Nguyễn Khánh Duy
      * Ngày cập nhật: 07/06/2026
      * Nội dung:
      * - Trước khi applyMove, kiểm tra nước đi có capture không
      * - Nếu có capture: reset noCaptureMoveCount = 0
      * - Nếu không có capture: tăng noCaptureMoveCount lên 1
+     * - Ghi nhận lịch sử nước đi vào historyManager (UC7.3)
      */
     //UC1.2 - Di chuyển quân cờ
     public void makeMove(Move m) {
@@ -389,13 +370,16 @@ public class GameController {
             noCaptureMoveCount++;   // tăng khi không ăn quân
         }
 
+        // UC7.3: ghi nhận lịch sử nước đi
+        historyManager.recordMove(whiteTurn, m, this.board);
+
         applyMove(this.board, m);
         
         whiteTurn = !whiteTurn;
     }
 
         // ─── UC7.1 – SAVE GAME ───────────────────────────────────────────────────
- 
+  
     /**
      * UC7.1 – Lưu trạng thái game hiện tại ra file mặc định.
      * Delegate sang SaveLoadManager.saveGame().
@@ -413,7 +397,7 @@ public class GameController {
         List<String> notations = historyManager.getNotations();
         return SaveLoadManager.saveGame(whiteTurn, board, notations);
     }
- 
+  
     /**
      * UC7.1 – Lưu game vào file chỉ định (dùng khi "Lưu As...").
      * @param filePath Đường dẫn file đầu ra
@@ -423,9 +407,9 @@ public class GameController {
         List<String> notations = historyManager.getNotations();
         return SaveLoadManager.saveGame(whiteTurn, board, notations, filePath);
     }
- 
+  
     // ─── UC7.2 – LOAD GAME ───────────────────────────────────────────────────
- 
+  
     /**
      * UC7.2 – Tải trạng thái game từ file mặc định, cập nhật board + lượt + lịch sử.
      *
@@ -442,20 +426,20 @@ public class GameController {
     public boolean loadGame() {
         GameState state = SaveLoadManager.loadGame();
         if (state == null) return false;
- 
+  
         this.board     = state.toBoard();    // UC7.2: khôi phục bàn cờ
         this.whiteTurn = state.whiteTurn;    // UC7.2: khôi phục lượt đi
- 
+  
         // UC7.3: khôi phục lịch sử nước đi
         if (state.moveHistory != null) {
             historyManager.restoreFromStrings(state.moveHistory);
         } else {
             historyManager.clear();
         }
- 
+  
         return true;
     }
- 
+  
     /**
      * UC7.2 – Load từ file chỉ định.
      * @param filePath Đường dẫn file
@@ -464,7 +448,7 @@ public class GameController {
     public boolean loadGame(String filePath) {
         GameState state = SaveLoadManager.loadGame(filePath);
         if (state == null) return false;
- 
+  
         this.board     = state.toBoard();
         this.whiteTurn = state.whiteTurn;
         if (state.moveHistory != null) historyManager.restoreFromStrings(state.moveHistory);
