@@ -9,6 +9,13 @@ import javax.swing.border.TitledBorder;
 import java.awt.*;
 import java.util.List;
 
+/**
+ * UC7.3 – Xem lịch sử nước đi
+ * Người thực hiện: Nguyễn Trần Xuân Đào
+ * Ngày thực hiện chỉnh sửa: 04/06/2024
+ * Mô tả: Panel hiển thị lịch sử nước đi trong giao diện chính. Được đặt bên phải bàn cờ (EAST trong BorderLayout của JFrame). Tự động cuộn xuống nước mới nhất sau mỗi lần cập nhật. Hỗ trợ tô màu phân biệt nước Trắng / Đen, highlight ăn quân.
+ */
+
 public class HistoryPanel extends JPanel {
 
     // ─── UI COMPONENTS ───────────────────────────────────────────────────────

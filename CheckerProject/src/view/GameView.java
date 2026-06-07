@@ -1,24 +1,21 @@
 package view;
 
-import controller.GameController;
-import controller.Winner;
-import model.Board;
-import model.Move;
-import model.Piece;
-
-import javax.swing.*;
-
 import ai.AlphaBeta;
 import ai.MiniMax;
 import ai.Node;
-
+import controller.GameController; 
+import controller.Winner;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
-import javax.imageio.ImageIO;
 import java.io.IOException;
-import java.util.List;
 import java.util.ArrayList;
+import java.util.List;
+import javax.imageio.ImageIO;
+import javax.swing.*;
+import model.Board;
+import model.Move;
+import model.Piece;
 
 /*
  * UC1.9 - Xac dinh nguoi di truoc
