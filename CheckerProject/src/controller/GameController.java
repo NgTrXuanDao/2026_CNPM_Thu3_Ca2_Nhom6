@@ -11,11 +11,18 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * GameController: nắm Board, lượt (whiteTurn).
- * - getValidMoves(r,c): trả về tất cả moves hợp lệ cho piece tại (r,c), ưu tiên capture (multi-jump).
- * - getAllMoves(forWhite): tất cả moves cho 1 bên (dùng AI).
- * - applyMove(Board, Move): áp dụng move lên board (dùng cho simulation và thực thi).
- * - makeMove(Move): áp dụng move lên controller.board và đổi lượt.
+ * GameController - Điều phối trò chơi Cờ Đam
+ * Người thực hiện: Đoàn Ngọc Ánh (Module 1 - Kế thừa)
+ * Ngày cập nhật: 07/06/2026
+ *
+ * UC1.1 - Khởi tạo ván chơi: khởi tạo GameController với Board và FirstTurnMode
+ * UC1.9 - Xác định người đi trước: resolveFirstTurn(), setFirstTurn(), resetGame()
+ * UC1.2 - Di chuyển quân cờ: applyMove(), makeMove()
+ * UC1.10 - Chọn quân & hiển thị nước đi hợp lệ: getValidMoves()
+ * UC1.11 - Đi chéo 1 ô: ALL_DIRS, lọc hướng di chuyển
+ * UC1.12 - Nhảy qua quân đối phương: findCaptureMoves()
+ * UC1.13 - Xóa quân bị ăn: clearCell trong applyMove()
+ * UC1.14 - Kiểm tra chuỗi ăn tiếp theo: findCaptureMoves() đệ quy
  *
  * US Checkers rules:
  * - piece (non-king) chỉ nhảy 2 ô chéo (forward theo màu)
@@ -26,15 +33,9 @@ public class GameController {
     private  Board board;
     private boolean whiteTurn;
 
-    /*
-     * UC1.9 - Xác định người đi trước
-     * Người thực hiện: Nhóm 6
-     * Ngày cập nhật: 02/06/2026
-     * Nội dung:
-     * - Bỏ hardcode whiteTurn = true
-     * - Thêm constructor nhận FirstTurnMode
-     * - Thêm method setFirstTurnFromMode() để xử lý logic chọn lượt
-     */
+    // ============================================================
+    // UC1.9 - Xác định người đi trước - Đoàn Ngọc Ánh
+    // ============================================================
 
     /** Mặc định White đi trước */
     public GameController(Board board) {
@@ -48,61 +49,48 @@ public class GameController {
 		this.whiteTurn = whiteTurn;
 	}
 
+    // UC1.1.6 - Hệ thống khởi tạo GameController với Board và FirstTurnMode
+    // UC1.9.5 - Hệ thống khởi tạo bàn cờ với lượt đã xác định
     /*
-     * UC1.9 - Xác định người đi trước
      * Khởi tạo GameController với chế độ chọn người đi trước
      * @param board Bàn cờ
      * @param mode  Chế độ: WHITE, BLACK hoặc RANDOM
      */
     public GameController(Board board, FirstTurnMode mode) {
         this.board = board;
-        // Xác định whiteTurn dựa vào mode
+        // UC1.9.4: Xác định whiteTurn dựa vào mode
         this.whiteTurn = resolveFirstTurn(mode);
     }
 
-    /*
-     * UC1.9 - Xác định người đi trước
-     * Giải quyết chế độ FirstTurnMode thành giá trị boolean whiteTurn
-     * @param mode Chế độ chọn người đi trước
-     * @return true nếu White đi trước, false nếu Black đi trước
-     */
-    /*
-     * UC1.9 - Xác định người đi trước
-     * Chuyển FirstTurnMode thành boolean whiteTurn
-     * @param mode Chế độ (có thể null -> fallback White)
-     * @return true = White, false = Black
-     */
+    // UC1.9.4 - Hệ thống xác định người đi trước dựa trên lựa chọn
+    // Chuyển FirstTurnMode thành boolean whiteTurn
+    // - WHITE → true (White đi trước)
+    // - BLACK → false (Black đi trước)
+    // - RANDOM → new Random().nextBoolean() (ngẫu nhiên)
+    // - null → true (fallback: White đi trước)
     public static boolean resolveFirstTurn(FirstTurnMode mode) {
-        if (mode == null) return true; // Null safety: mặc định White
+        if (mode == null) return true; // UC1.9.4.3: Null safety - mặc định White
         switch (mode) {
             case WHITE:
                 return true;  // White đi trước
             case BLACK:
                 return false; // Black đi trước
             case RANDOM:
-                // Random true/false - 50% cơ hội cho mỗi bên
+                // UC1.9.4.2: Random true/false - 50% cơ hội cho mỗi bên
                 return new Random().nextBoolean();
             default:
                 return true; // Mặc định White đi trước
         }
     }
 
-    /*
-     * UC1.9 - Xác định người đi trước
-     * Thiết lập lại lượt đi dựa trên chế độ (dùng khi restart)
-     * @param mode Chế độ người đi trước
-     */
+    // UC1.9.5 - Thiết lập lại lượt đi dựa trên chế độ (dùng khi restart)
     public void setFirstTurn(FirstTurnMode mode) {
         this.whiteTurn = resolveFirstTurn(mode);
     }
 
-    /*
-     * UC1.9 - Xác định người đi trước
-     * Reset bàn cờ và thiết lập lại lượt đi đầu tiên
-     * @param mode Chế độ người đi trước (có thể null để giữ nguyên chế độ cũ)
-     */
+    // UC1.9.5 - Reset bàn cờ và thiết lập lại lượt đi đầu tiên (dùng khi restart)
     public void resetGame(FirstTurnMode mode) {
-        this.board.initialize(); // Khởi tạo lại bàn cờ
+        this.board.initialize(); // Gọi UC1.7 + UC1.8: Khởi tạo lại bàn cờ
         if (mode != null) {
             setFirstTurn(mode);  // Thiết lập lượt đi đầu
         }
@@ -111,42 +99,43 @@ public class GameController {
 	public Board getBoard() { return board; }
     public boolean isWhiteTurn() { return whiteTurn; }
 
-    // 4 hướng chéo
-    //UC1.11 - Đi chéo 1 ô – không lùi trừ vua
+    // UC1.11.1 - 4 hướng chéo dùng để duyệt nước đi: (-1,-1) (-1,1) (1,-1) (1,1)
+    // UC1.11.2 - Với quân thường: chỉ 2 hướng tiến; Với vua: cả 4 hướng
     private static final int[][] ALL_DIRS = new int[][] {
             {-1,-1}, {-1,1}, {1,-1}, {1,1}
     };
 
-    /**
-     * Trả về tất cả valid moves cho piece ở (r,c).
-     * Nếu piece null hoặc không phải lượt -> list rỗng.
-     * Nếu có capture sequences -> trả về chỉ capture sequences (mỗi Move có path & captures).
-     */
-    //UC1.10 - Chọn quân & hiển thị nước đi hợp lệ
+    // UC1.10.3 - Hệ thống gọi getValidMoves() để tính danh sách Move hợp lệ
+    // - Nếu piece null hoặc không phải lượt → list rỗng
+    // - Nếu có capture sequences → trả về chỉ capture sequences (ưu tiên ăn quân)
     public List<Move> getValidMoves(int r, int c) {
         List<Move> result = new ArrayList<>();
         Piece p = board.getPiece(r,c);
+        // UC1.10.2: Kiểm tra quân tồn tại và thuộc đúng lượt
         if (p == null) return result;
         if (p.isWhite != whiteTurn) return result; // không phải lượt piece này
 
-        // 1) tìm tất cả Các nước có thể ăn bằng đệ quy. Sử dụng board.copy() để simulate
+        // UC1.12.1: Tìm tất cả nước ăn quân bằng đệ quy
         List<Move> captureMoves = new ArrayList<>();
         findCaptureMoves(board.copy(), r, c, new ArrayList<>(), new ArrayList<>(), captureMoves);
 
+        // UC1.10.4: Nếu có nước ăn, chỉ trả về nước ăn (bắt buộc ăn)
         if (!captureMoves.isEmpty()) {
-            return captureMoves; // bắt buộc ăn -> chỉ trả capture
+            return captureMoves; // bắt buộc ăn → chỉ trả capture
         }
 
-        // 2) nếu không có capture -> tạo normal moves
-        //UC1.16 - Vua đi lùi & di chuyển xa hơn
+        // UC1.11: Nếu không có capture → tạo normal moves (đi chéo 1 ô)
         for (int[] d : ALL_DIRS) {
+            // UC1.11.2: Quân thường chỉ đi tiến, vua đi được cả 4 hướng
             if (!p.isKing) {
                 int forward = p.isWhite ? -1 : 1;
                 if (d[0] != forward) continue; // non-king chỉ forward
             }
             
+            // UC1.11.3: Tính ô đích và kiểm tra trong biên
             int nr = r + d[0], nc = c + d[1];
             if (!board.inBounds(nr,nc)) continue;
+            // UC1.11.4: Nếu ô đích trống → tạo Move và thêm vào danh sách
             if (board.getPiece(nr,nc) == null) {
                 Move m = new Move(r,c,nr,nc);
                 result.add(m);
@@ -240,12 +229,14 @@ public class GameController {
      * NOTE: chúng ta copy piece khi đặt ở ô đích để tránh tham chiếu chéo khi simulate.
      */
 
-    //UC1.2 - Di chuyển quân cờ
+    // ============================================================
+    // UC1.2 - Di chuyển quân cờ - Đoàn Ngọc Ánh
+    // ============================================================
+    // UC1.2.7: Thực hiện di chuyển quân trên board
     public static void applyMove(Board b, Move m) {
         if (m == null) return;
         Point from = m.from();
         Point to = m.to();
-        //System.out.println(from.x+","+from.y+"-"+to.x+","+to.y);
         if (from == null || to == null) return;
 
         int fr = from.y, fc = from.x;
@@ -253,13 +244,12 @@ public class GameController {
         Piece p = b.getPiece(fr, fc);
         if (p == null) return;
 
-        // place a copy at destination (safer cho simulation)
-        //UC1.2 - Di chuyển quân cờ
+        // UC1.13.1: Di chuyển quân từ ô nguồn sang ô đích (copy để an toàn khi simulate)
         b.setPiece(tr, tc, p.copy());
+        // UC1.13.2: Xóa quân khỏi ô nguồn
         b.clearCell(fr, fc);
 
-        // remove captured pieces
-        //UC1.13 - Xóa quân bị ăn
+        // UC1.13.3: Xóa tất cả quân bị ăn trong danh sách captures
         for (Point cap : m.captures) {
             b.clearCell(cap.y, cap.x);
         }
@@ -274,28 +264,27 @@ public class GameController {
         }
     }
 
-    //UC1.2 - Di chuyển quân cờ
+    // UC1.2.9: Áp dụng move và chuyển lượt sau khi kết thúc nước đi
+    // (Được gọi sau khi hoàn tất chuỗi ăn hoặc nước đi thường)
     public void makeMove(Move m) {
         applyMove(this.board, m);
-        
+        // Chuyển lượt sang đối phương (không gọi khi đang trong chuỗi ăn liên tiếp)
         whiteTurn = !whiteTurn;
     }
 
 
+    // ============================================================
+    // UC1.12 - Nhảy qua quân đối phương - Đoàn Ngọc Ánh
+    // UC1.14 - Kiểm tra chuỗi ăn tiếp theo (đệ quy)
+    // ============================================================
     /**
-     * - b: board hiện tại (đã được clone khi gọi ban đầu)
+     * Tìm tất cả nước ăn quân bằng đệ quy.
+     * - b: board hiện tại (đã clone)
      * - curR,curC: vị trí hiện tại
-     * - pathSoFar: list Point (col,row) path đã đi (start có thể được thêm)
+     * - pathSoFar: list Point path đã đi
      * - capsSoFar: list Point các vị trí bị ăn
      * - outMoves: collect kết quả (Move)
-     *
-     * Logic:
-     *  - duyệt 4 hướng; với non-king thì chỉ forward
-     *  - nếu cạnh có enemy và ô landing trống => simulate capture trên clone (nb)
-     *  - sau simulate: gọi đệ quy tìm tiếp từ landing
-     *  - nếu không có extension và capsSoFar không rỗng -> tạo Move từ pathSoFar và capsSoFar
      */
-    //UC1.3 - Ăn quân
     private void findCaptureMoves(Board b, int curR, int curC,
                                   List<Point> pathSoFar, List<Point> capsSoFar,
                                   List<Move> outMoves) {
@@ -307,31 +296,29 @@ public class GameController {
 
         boolean extended = false;
 
+        // UC1.14.2: Duyệt 4 hướng chéo để tìm nước ăn tiếp
         for (int[] d : ALL_DIRS) {
             if (!p.isKing) {
                 int forward = p.isWhite ? -1 : 1;
                 if (d[0] != forward) continue;
             }
-           // UC1.12 - Nhảy qua quân đối phương
-            // Vị trí quân cờ bị ăn 
+           // UC1.12.1: Xác định quân đối phương ở ô kề
             int midR = curR + d[0], midC = curC + d[1];
-            // Vị trí đặt sau ăn
+            // UC1.12.2: Tính ô đích sau khi nhảy
             int landR = curR + 2*d[0], landC = curC + 2*d[1];
 
-            // Kiểm tra mid và land có hợp lệ trong bàn cờ không
+            // UC1.12.2: Kiểm tra ô trong biên
             if (!b.inBounds(midR, midC) || !b.inBounds(landR, landC)) continue;
-            // Lấy quân cờ
+            // UC1.12.1: Lấy quân tại ô kề (mid)
             Piece mid = b.getPiece(midR, midC);
+            // UC1.12.3: Kiểm tra ô đích trống
             Piece land = b.getPiece(landR, landC); 
 
-            // Kiểm tra quân trước mặt, và đăngf sau quân bị ăn không có quân nào
-            // Kiểm tra có khác quân
-            //Đệ quy lấy tất cả nước đi có thể
+            // UC1.12: Kiểm tra ô kề có quân đối phương và ô đích trống
             if (mid != null && mid.isWhite != p.isWhite && land == null) {
-            	//Thực hiện nước đi ăn quân
-                //UC1.13 - Xóa quân bị ăn
-                //UC1.4 - Ăn liên tiếp
-                //UC1.14 - Kiểm tra chuỗi ăn tiếp theo
+            	// UC1.12.4: Thực hiện nước đi ăn quân trên bản sao
+                // UC1.13.3: Xóa quân bị ăn (mid) khỏi bàn cờ
+                // UC1.14.2: Ghi nhận và kiểm tra chuỗi ăn tiếp theo
                 Board nb = b.copy();
                 nb.clearCell(midR, midC);
                 Piece moved = nb.getPiece(curR, curC);
@@ -341,15 +328,15 @@ public class GameController {
                 List<Point> nPath = new ArrayList<>(path);
                 nPath.add(new Point(landC, landR));
                 List<Point> nCaps = new ArrayList<>(capsSoFar);
-                nCaps.add(new Point(midC, midR));
+                nCaps.add(new Point(midC, midR)); // UC1.12.4: Ghi nhận quân bị ăn
 
-                // Đệ quy
+                // UC1.14.1: Đệ quy tìm chuỗi ăn tiếp theo từ vị trí mới
                 findCaptureMoves(nb, landR, landC, nPath, nCaps, outMoves);
                 extended = true;
             }
         }
 
-        // nếu không có extension và đã có captures -> kết thúc chuỗi
+        // UC1.14.3: Nếu không mở rộng được và đã có captures → kết thúc chuỗi
         if (!extended && !capsSoFar.isEmpty()) {
             Move m = new Move();
             for (Point pnt : path) m.path.add(new Point(pnt.x, pnt.y));

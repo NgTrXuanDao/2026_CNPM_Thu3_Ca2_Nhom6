@@ -21,12 +21,14 @@ import java.util.List;
 import java.util.ArrayList;
 
 /*
- * UC1.9 - Xac dinh nguoi di truoc
- * Nguoi thuc hien: Doan Ngoc Anh
- * Ngay cap nhat: 02/06/2026
+ * UC1.9 - Xac dinh nguoi di truoc - Đoàn Ngọc Ánh
+ * Nguoi thuc hien: Đoàn Ngọc Ánh
+ * Ngay cap nhat: 02/06/2026 → 07/06/2026
  * Noi dung:
- * - Hien thi thong tin luot di hien tai (White/Black turn)
+ * - UC1.9.6: Hien thi thong tin luot di hien tai (White/Black turn) qua getTurnText()
  * - Ve truc tiep thong tin turn trong paintComponent (khong dung child component)
+ * - UC1.2: Hỗ trợ xử lý click chọn quân và di chuyển
+ * - UC1.10: Hỗ trợ hiển thị highlight nước đi hợp lệ
  */
 
 /*
@@ -343,7 +345,8 @@ public class GameView extends JPanel {
         });
     }
 
-    // UC 2.1 : PVP
+    // UC1.2.1 - Người chơi nhấp chuột vào ô chứa quân (chế độ PvP)
+    // UC2.1: PVP
     private void handleClick4(int r, int c) {
         if (aiThinking || isAnimating) return;
         Piece p = controller.getBoard().getPiece(r, c);
@@ -439,10 +442,7 @@ public class GameView extends JPanel {
         return null;
     }
 
-    /*
-     * UC1.9 - Xac dinh nguoi di truoc
-     * Lay chuoi hien thi thong tin luot di hien tai
-     */
+    // UC1.9.6 - Lấy chuỗi hiển thị thông tin lượt đi hiện tại
     private String getTurnText() {
         if (isPaused) {
             return "GAME DANG TAM DUNG";
@@ -459,7 +459,7 @@ public class GameView extends JPanel {
         super.paintComponent(g);
         // UC1.9: Ve thong tin luot o phia tren
         drawTurnInfo(g);
-        // Ve ban co (dich xuong duoi phan thong tin luot)
+        // UC1.9.6: Vẽ bàn cờ (dịch xuống dưới phần thông tin lượt)
         Graphics2D g2d = (Graphics2D) g.create();
         g2d.translate(0, INFO_PANEL_HEIGHT);
         drawBoard(g2d);
@@ -468,10 +468,7 @@ public class GameView extends JPanel {
         g2d.dispose();
     }
 
-    /*
-     * UC1.9 - Xac dinh nguoi di truoc
-     * Ve thong tin luot di hien tai o phia tren cung
-     */
+    // UC1.9.6 - Vẽ thông tin lượt đi hiện tại ở phía trên cùng bàn cờ
     private void drawTurnInfo(Graphics g) {
         // Background cho phan thong tin
         g.setColor(new Color(50, 50, 50));

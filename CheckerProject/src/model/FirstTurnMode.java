@@ -1,11 +1,11 @@
 package model;
 
 /*
- * UC1.9 - Xác định người đi trước
- * Người thực hiện: Nhóm 6
- * Ngày cập nhật: 02/06/2026
+ * UC1.9 - Xác định người đi trước - Đoàn Ngọc Ánh
+ * Người thực hiện: Nhóm 6 → Đoàn Ngọc Ánh (kế thừa chỉnh sửa)
+ * Ngày cập nhật: 07/06/2026
  * Nội dung:
- * - Enum định nghĩa 3 chế độ chọn người đi trước
+ * - Enum định nghĩa 3 chế độ chọn người đi trước (UC1.9.1)
  * - WHITE: Trắng đi trước
  * - BLACK: Đen đi trước
  * - RANDOM: Random ngẫu nhiên

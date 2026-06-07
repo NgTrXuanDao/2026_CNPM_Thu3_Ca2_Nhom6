@@ -1,8 +1,12 @@
 package model;
 
+// UC1.1 - Khởi tạo ván chơi - Đoàn Ngọc Ánh
+// UC1.7 - Tạo bàn cờ 8x8
+// UC1.8 - Đặt quân ban đầu
 public class Board {
     private Piece[][] board = new Piece[8][8];
 
+    // UC1.1.1 - Hệ thống khởi tạo Board, gọi initialize() để tạo bàn cờ 8x8 (gọi UC1.7)
     public Board() {
         initialize();
     }
@@ -11,23 +15,27 @@ public class Board {
         this.board = data;
     }
 
-    // UC1.1 - Khởi tạo ván chơi
-    // UC1.7 - Tạo bàn cờ 8x8
-    // UC1.8 - Đặt quân ban đầu
+    // UC1.7.1 - GameController gọi hàm khởi tạo Board, tạo đối tượng Board mới qua new Board()
+    // UC1.7.2 - Constructor Board() gọi initialize(); vòng lặp r=0..7, c=0..7 thiết lập board[r][c] = null
+    // UC1.8.1 - initialize() tiến hành vòng lặp r=0..2, c=0..7: tạo Piece(false) - quân đen
+    // UC1.8.2 - Gán quân đen vào board[r][c] tương ứng
+    // UC1.8.3 - initialize() tiến hành vòng lặp r=5..7, c=0..7: tạo Piece(true) - quân trắng
+    // UC1.8.4 - Gán quân trắng vào board[r][c] tương ứng
+    // UC1.8.5 - Hoàn tất: 24 quân được đặt đúng vị trí
     public void initialize() {
-        // UC1.7: Tạo bàn cờ 8x8 - khởi tạo toàn bộ ô về null
+        // UC1.7.2: Vòng lặp khởi tạo toàn bộ 64 ô về null
         for (int r = 0; r < 8; r++)
             for (int c = 0; c < 8; c++)
                 board[r][c] = null;
 
-        // UC1.8: Đặt quân ban đầu - quân đen (false) ở 3 hàng trên, ô lẻ
+        // UC1.8.1: Đặt quân đen (false) ở 3 hàng trên, ô lẻ (r+c)%2==1
         for (int r = 0; r < 3; r++) {
             for (int c = 0; c < 8; c++) {
                 if ((r + c) % 2 == 1) board[r][c] = new Piece(false);
             }
         }
 
-        // UC1.8: Đặt quân ban đầu - quân trắng (true) ở 3 hàng dưới, ô lẻ
+        // UC1.8.3: Đặt quân trắng (true) ở 3 hàng dưới, ô lẻ (r+c)%2==1
         for (int r = 5; r < 8; r++) {
             for (int c = 0; c < 8; c++) {
                 if ((r + c) % 2 == 1) board[r][c] = new Piece(true);
@@ -35,13 +43,14 @@ public class Board {
         }
     }
 
+    // UC1.10.2 - Hỗ trợ: lấy quân tại ô (gameplay selection)
     // UC5.1 - Kiểm tra nước đi hợp lệ (hỗ trợ - lấy quân tại ô)
-    // UC1.10 - Chọn quân & hiển thị nước đi hợp lệ (hỗ trợ)
     public Piece getPiece(int row, int col) {
         if (!inBounds(row, col)) return null;
         return board[row][col];
     }
 
+    // UC1.13.1 - Hỗ trợ: đặt quân vào ô đích sau khi di chuyển hoặc ăn quân
     // UC1.2 - Di chuyển quân cờ (hỗ trợ - đặt quân vào ô mới)
     // UC1.5 - Phong cấp vua (hỗ trợ - cập nhật ô sau phong cấp)
     public void setPiece(int row, int col, Piece p) {
@@ -49,6 +58,7 @@ public class Board {
         board[row][col] = p;
     }
 
+    // UC1.13.2 - Hỗ trợ: xóa quân khỏi ô nguồn và các ô bị ăn (captures)
     // UC1.13 - Xóa quân bị ăn
     // UC1.3 - Ăn quân (hỗ trợ - xóa ô sau khi ăn)
     public void clearCell(int row, int col) {

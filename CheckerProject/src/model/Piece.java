@@ -1,17 +1,20 @@
 package model;
 
+// UC1.8 - Đặt quân ban đầu - Đoàn Ngọc Ánh
+// UC1.9 - Xác định người đi trước
+// UC1.11 - Đi chéo 1 ô (không lùi trừ vua)
 public class Piece {
-    // UC1.9 - Xác định người đi trước: phân biệt quân trắng/đen để xác định lượt
+    // UC1.9: Phân biệt quân trắng/đen để xác định lượt
     // UC5.1 - Kiểm tra nước đi hợp lệ: xác định quân thuộc bên nào để validate
     // UC1.17 - Hết quân → thua: đếm quân theo màu để kiểm tra điều kiện thua
     public boolean isWhite;
 
+    // UC1.11.2: Xác định quân vua có thể đi 4 hướng (cả tiến lẫn lùi)
     // UC1.5 - Phong cấp – vua: đánh dấu quân đã được phong cấp thành vua
     // UC1.16 - Vua đi lùi & di chuyển xa hơn: kiểm tra isKing để mở rộng nước đi
-    // UC1.11 - Đi chéo 1 ô – không lùi trừ vua: quân thường không được đi lùi
     public boolean isKing;
 
-    // UC1.8 - Đặt quân ban đầu: khởi tạo quân cờ thường (chưa phong vua)
+    // UC1.8.1/1.8.3: Khởi tạo quân cờ thường (chưa phong vua) khi đặt quân ban đầu
     // UC1.1 - Khởi tạo ván chơi: tạo các quân cờ khi bắt đầu ván mới
     public Piece(boolean isWhite) {
         this.isWhite = isWhite;
