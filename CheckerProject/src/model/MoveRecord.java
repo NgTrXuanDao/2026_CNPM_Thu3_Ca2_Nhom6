@@ -3,6 +3,16 @@ package model;
 import java.awt.Point;
 import java.io.Serializable;
 
+/**
+ * UC7.3 – Xem lịch sử nước đi
+ * Người thực hiện: Nguyễn Trần Xuân Đào
+ * Ngày thực hiện chỉnh sửa: 04/06/2024
+ * Mô tả: Đối tượng bất biến (immutable) lưu thông tin chi tiết của MỘT nước đi trong lịch sử ván đấu.Tương ứng UC7.3 – Xem lịch sử nước đi.
+ * Được tạo bởi  : MoveHistoryManager.recordMove()
+ * Được đọc bởi  : HistoryPanel (để hiển thị lên UI), SaveLoadManager (để serialize lịch sử)
+ * Phụ thuộc vào : model.Move (để trích xuất thông tin nước đi)
+ */
+
 public class MoveRecord implements Serializable {
 
     private static final long serialVersionUID = 20260604_002L;

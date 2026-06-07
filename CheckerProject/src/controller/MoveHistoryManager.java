@@ -1,14 +1,20 @@
 package controller;
 
-import model.Move;
-import model.MoveRecord;
-import model.Piece;
-import model.Board;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import model.Board;
+import model.Move;
+import model.MoveRecord;
+import model.Piece;
 
+/**
+ * UC7.3 – Xem lịch sử nước đi
+ * Người thực hiện: Nguyễn Trần Xuân Đào
+ * Ngày thực hiện: 04/06/2024
+ * Mô tả: Quản lý toàn bộ lịch sử nước đi trong một ván cờ. Nhận thông báo mỗi khi có nước đi mới, tạo MoveRecord, lưu vào danh sách nội bộ, và cung cấp dữ liệu cho UI (HistoryPanel) và SaveLoadManager.
+
+ */
 public class MoveHistoryManager {
 
     // ─── FIELDS ──────────────────────────────────────────────────────────────
