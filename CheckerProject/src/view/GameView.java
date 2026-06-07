@@ -21,12 +21,14 @@ import model.Move;
 import model.Piece;
 
 /*
- * UC1.9 - Xac dinh nguoi di truoc
- * Nguoi thuc hien: Doan Ngoc Anh
- * Ngay cap nhat: 02/06/2026
+ * UC1.9 - Xac dinh nguoi di truoc - Đoàn Ngọc Ánh
+ * Nguoi thuc hien: Đoàn Ngọc Ánh
+ * Ngay cap nhat: 02/06/2026 → 07/06/2026
  * Noi dung:
- * - Hien thi thong tin luot di hien tai (White/Black turn)
+ * - UC1.9.6: Hien thi thong tin luot di hien tai (White/Black turn) qua getTurnText()
  * - Ve truc tiep thong tin turn trong paintComponent (khong dung child component)
+ * - UC1.2: Hỗ trợ xử lý click chọn quân và di chuyển
+ * - UC1.10: Hỗ trợ hiển thị highlight nước đi hợp lệ
  */
 
 /*
@@ -456,7 +458,8 @@ public class GameView extends JPanel {
         });
     }
 
-    // UC 2.1 : PVP
+    // UC1.2.1 - Người chơi nhấp chuột vào ô chứa quân (chế độ PvP)
+    // UC2.1: PVP
     private void handleClick4(int r, int c) {
         if (aiThinking || isAnimating) return;
         Piece p = controller.getBoard().getPiece(r, c);
@@ -740,6 +743,7 @@ public class GameView extends JPanel {
         return null;
     }
 
+    // UC1.9.6 - Lấy chuỗi hiển thị thông tin lượt đi hiện tại
     /*
      * UC1.9 - Xac dinh nguoi di truoc
      * Lay chuoi hien thi thong tin luot di hien tai
@@ -765,7 +769,7 @@ public class GameView extends JPanel {
         super.paintComponent(g);
         // [UC3.4 - Buoc 1] paintComponent() được gọi → g2d.translate + drawTurnInfo(g)
         drawTurnInfo(g);
-        // Ve ban co (dich xuong duoi phan thong tin luot)
+        // UC1.9.6: Vẽ bàn cờ (dịch xuống dưới phần thông tin lượt)
         Graphics2D g2d = (Graphics2D) g.create();
         // [UC3.1 - Buoc 1] translate(0, INFO_PANEL_HEIGHT) để dịch xuống dưới thanh trạng thái
         g2d.translate(0, INFO_PANEL_HEIGHT);
@@ -776,6 +780,7 @@ public class GameView extends JPanel {
         g2d.dispose();
     }
 
+    // UC1.9.6 - Vẽ thông tin lượt đi hiện tại ở phía trên cùng bàn cờ
     /*
      * UC1.9 - Xac dinh nguoi di truoc
      * Ve thong tin luot di hien tai o phia tren cung

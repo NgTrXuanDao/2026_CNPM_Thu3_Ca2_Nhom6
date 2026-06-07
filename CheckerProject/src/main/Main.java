@@ -17,12 +17,19 @@ import view.GameView;
 import view.HistoryPanel;
 
 /*
- * UC1.9 - Xac dinh nguoi di truoc
- * Nguoi thuc hien: Nhom 6
- * Ngay cap nhat: 02/06/2026
- * Noi dung:
- * - Hien thi dialog chon nguoi di truoc khi bat dau game
- * - Truyen FirstTurnMode vao GameController
+ * UC1.1 - Khởi tạo ván chơi - Đoàn Ngọc Ánh
+ * UC1.9 - Xác định người đi trước
+ * Người thực hiện: Nhóm 6 → Đoàn Ngọc Ánh (kế thừa chỉnh sửa)
+ * Ngày cập nhật: 07/06/2026
+ * Nội dung:
+ * - UC1.1.1: Khởi tạo Board, gọi initialize() tạo bàn cờ 8x8
+ * - UC1.1.3: Tạo JFrame và hiển thị FirstTurnDialog (modal)
+ * - UC1.1.5: Lấy FirstTurnMode từ dialog qua getSelectedMode()
+ * - UC1.1.6: Khởi tạo GameController với Board và FirstTurnMode
+ * - UC1.1.7: Khởi tạo GameView, thêm vào JFrame và hiển thị
+ * - UC1.9.4: resolveFirstTurn() xác định whiteTurn từ FirstTurnMode
+ * - UC1.9.5: Khởi tạo bàn cờ với lượt đã xác định
+ * - UC1.9.6: GameView hiển thị thông tin lượt đi
  */
 
 /**
@@ -39,26 +46,28 @@ import view.HistoryPanel;
 
 public class Main {
     public static void main(String[] args) {
+        // UC1.1.1 + UC1.7: Khởi tạo Board, gọi initialize() tạo bàn cờ 8x8
         Board board = new Board();
 
-        // Tao frame chinh (an cho den khi dialog hoan tat)
+        // UC1.1.3: Tạo JFrame và hiển thị FirstTurnDialog (modal)
         JFrame f = new JFrame("Checkers");
         f.setLayout(new BorderLayout());
 
-        // === UC1.9: Hien thi dialog chon nguoi di truoc ===
+        // === UC1.9.1: Hiển thị dialog chọn người đi trước ===
         FirstTurnDialog turnDialog = new FirstTurnDialog(f);
-        turnDialog.setVisible(true); // modal -> cho nguoi dung chon
+        turnDialog.setVisible(true); // modal -> chờ người dùng chọn (UC1.9.2 - 1.9.3)
 
-        // Lay che do da chon tu dialog
+        // UC1.1.5: Lấy chế độ đã chọn từ dialog
         FirstTurnMode firstTurnMode = turnDialog.getSelectedMode();
 
-        // Khoi tao GameController voi che do nguoi di truoc da chon
+        // UC1.1.6 + UC1.9.5: Khởi tạo GameController với Board và FirstTurnMode
+        // resolveFirstTurn() xác định whiteTurn (UC1.9.4)
         GameController controller = new GameController(board, firstTurnMode);
 
         // === UC7.3: Tao HistoryPanel ===
         HistoryPanel historyPanel = new HistoryPanel();
 
-        // Tao GameView va truyen controller
+        // UC1.1.7: Tạo GameView và truyền controller
          GameView gameView = new GameView(controller, historyPanel);
 
         // Cập nhật chế độ chơi đã chọn từ Dialog sang bàn cờ

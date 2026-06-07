@@ -4,20 +4,24 @@ import java.awt.Point;
 import java.util.ArrayList;
 import java.util.List;
 
+// UC1.2 - Di chuyển quân cờ - Đoàn Ngọc Ánh
+// UC1.10 - Chọn quân & hiển thị nước đi hợp lệ
+// UC1.12 - Nhảy qua quân đối phương
+// UC1.13 - Xóa quân bị ăn
+// UC1.14 - Kiểm tra chuỗi ăn tiếp theo
 public class Move {
-    // UC1.2 - Di chuyển quân cờ: lưu danh sách các ô trên đường đi
+    // UC1.2: Lưu danh sách các ô trên đường đi (path)
     // UC1.4 - Ăn liên tiếp: path chứa nhiều bước trong một lượt ăn liên tiếp
     public final List<Point> path = new ArrayList<>();
 
-    // UC1.3 - Ăn quân: lưu danh sách các quân bị ăn trong nước đi
+    // UC1.13.3: Danh sách các quân bị ăn (captures) - dùng để xóa khỏi board
     // UC1.4 - Ăn liên tiếp: captures chứa nhiều quân bị ăn liên tiếp
-    // UC1.13 - Xóa quân bị ăn: danh sách ô cần xóa sau khi thực hiện nước đi
     public final List<Point> captures = new ArrayList<>();
 
     public Move() {}
 
+    // UC1.10: Khởi tạo nước đi đơn giản từ ô này sang ô khác (dùng cho normal move)
     // UC1.2 - Di chuyển quân cờ: khởi tạo nước đi đơn giản từ ô này sang ô khác
-    // UC1.10 - Chọn quân & hiển thị nước đi hợp lệ: tạo nước đi để hiển thị gợi ý
     public Move(int fromRow, int fromCol, int toRow, int toCol) {
         path.add(new Point(fromCol, fromRow));
         path.add(new Point(toCol, toRow));
@@ -30,16 +34,15 @@ public class Move {
         path.add(new Point(col, row));
     }
 
-    // UC1.3 - Ăn quân: ghi nhận ô chứa quân bị ăn
-    // UC1.4 - Ăn liên tiếp: ghi nhận từng quân bị ăn trong chuỗi
-    // UC1.13 - Xóa quân bị ăn: cung cấp danh sách ô để xóa sau khi di chuyển
+    // UC1.12.4: Ghi nhận tọa độ quân bị ăn vào danh sách captures
+    // UC1.13.3: Cung cấp danh sách ô để xóa sau khi di chuyển
     public void addCapture(int row, int col) {
         captures.add(new Point(col, row));
     }
 
+    // Hỗ trợ: Xác định nước đi có ăn quân không (dùng trong getValidMoves và findCaptureMoves)
     // UC5.2 - Bắt buộc ăn quân nếu có thể: kiểm tra nước đi có ăn quân không
     // UC5.4 - Chặn nước đi thường khi có thể ăn: phân biệt nước đi thường vs ăn quân
-    // UC1.14 - Kiểm tra chuỗi ăn tiếp theo: xác định nước đi có phải ăn không
     public boolean isCapture() {
         return !captures.isEmpty();
     }
@@ -52,8 +55,8 @@ public class Move {
         return path.get(path.size() - 1);
     }
 
-    // UC1.2 - Di chuyển quân cờ: lấy ô xuất phát của nước đi
-    // UC1.10 - Chọn quân & hiển thị nước đi hợp lệ: xác định quân nào đang được chọn
+    // UC1.2: Lấy ô xuất phát của nước đi
+    // UC1.10: Xác định quân nào đang được chọn
     public Point from() {
         if (path.isEmpty()) return null;
         return path.get(0);

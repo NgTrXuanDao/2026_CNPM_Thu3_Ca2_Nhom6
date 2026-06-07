@@ -8,13 +8,14 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 
 /*
- * UC1.9 - Xác định người đi trước
- * Người thực hiện: Nhóm 6
- * Ngày cập nhật: 02/06/2026
+ * UC1.9 - Xác định người đi trước - Đoàn Ngọc Ánh
+ * Người thực hiện: Nhóm 6 → Đoàn Ngọc Ánh (kế thừa chỉnh sửa)
+ * Ngày cập nhật: 07/06/2026
  * Nội dung:
- * - Tạo dialog cho phép người dùng chọn người đi trước
- * - Hỗ trợ 3 chế độ: White first, Black first, Random
- * - Trả về kết quả FirstTurnMode để Controller xử lý
+ * - UC1.9.1: Hiển thị dialog "Chọn người đi trước" với 3 tùy chọn
+ * - UC1.9.2: Người chơi chọn 1 trong 3 tùy chọn
+ * - UC1.9.3: Người chơi nhấn nút "Bắt đầu"
+ * - Trả về kết quả FirstTurnMode để Controller xử lý UC1.9.4
  */
 public class FirstTurnDialog extends JDialog {
 
@@ -40,6 +41,7 @@ public class FirstTurnDialog extends JDialog {
         initUI();
     }
 
+    // UC1.9.1 - Hệ thống hiển thị dialog "Chọn người đi trước" với 3 tùy chọn
     /**
      * Khởi tạo giao diện dialog
      * - Panel chính với title, các radio button và nút Start
@@ -83,7 +85,7 @@ public class FirstTurnDialog extends JDialog {
         diffCenter.add(btnHard);
         diffPanel.add(diffCenter, BorderLayout.CENTER);
 
-        // --- PANEL TẦNG 3: CHỌN TURN ĐI TRƯỚC ---
+        // --- UC1.9.1: PANEL CHỌN NGƯỜI ĐI TRƯỚC (3 tùy chọn) ---
         JPanel turnPanel = new JPanel(new BorderLayout(10, 10));
         JLabel titleLabel = new JLabel("Chọn người đi trước", SwingConstants.CENTER);
         titleLabel.setFont(new Font("Arial", Font.BOLD, 18));
@@ -93,6 +95,7 @@ public class FirstTurnDialog extends JDialog {
         JPanel centerPanel = new JPanel(new GridLayout(3, 1, 10, 10));
         centerPanel.setBorder(BorderFactory.createEmptyBorder(10, 40, 10, 40));
 
+        // UC1.9.1: 3 tùy chọn radio button: Trắng, Đen, Random
         JRadioButton whiteFirstBtn = new JRadioButton("Trắng (White) đi trước", true);
         JRadioButton blackFirstBtn = new JRadioButton("Đen (Black) đi trước", false);
         JRadioButton randomBtn = new JRadioButton("Random ngẫu nhiên", false);
@@ -117,9 +120,11 @@ public class FirstTurnDialog extends JDialog {
         startBtn.setFont(new Font("Arial", Font.BOLD, 14));
         startBtn.setPreferredSize(new Dimension(150, 40));
 
+        // UC1.9.2 + UC1.9.3: Người chơi chọn tùy chọn và nhấn nút "Bắt đầu"
         startBtn.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
+                // UC1.9.2: Xác định lựa chọn của người chơi
                 if (whiteFirstBtn.isSelected()) {
                     selectedMode = FirstTurnMode.WHITE;
                 } else if (blackFirstBtn.isSelected()) {
@@ -127,7 +132,7 @@ public class FirstTurnDialog extends JDialog {
                 } else if (randomBtn.isSelected()) {
                     selectedMode = FirstTurnMode.RANDOM;
                 }
-                dispose();
+                dispose(); // UC1.9.3: Đóng dialog sau khi chọn
             }
         });
 
