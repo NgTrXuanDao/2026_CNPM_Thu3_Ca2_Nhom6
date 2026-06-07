@@ -22,6 +22,19 @@ import model.Piece;
  * - king có thể nhảy 4 hướng (nhưng vẫn nhảy 2 ô)
  * - bắt buộc ăn: nếu có một hay nhiều capture, chỉ phép capture.
  */
+
+/**
+ * UC 7.1 - Save game, UC7.2 - Load game, UC7.3 - Lịch sử nước đi
+ * Người thực hiện: Nguyễn Trần Xuân Đào
+ * Ngày cập nhật chỉnh sửa: 07/06/2026
+ * Nội dung:
+ * - Thêm MoveHistoryManager để quản lý lịch sử nước đi (dùng cho cả save/load và hiển thị)
+ * - Cập nhật makeMove() để ghi lại lịch sử mỗi khi có nước đi mới
+ * - Cập nhật saveGame() và loadGame() để lưu và khôi phục lịch sử nước đi cùng với board và lượt
+ * - Thêm getHistoryNotations() để cung cấp danh sách notation dạng String cho SaveLoadManager
+ * - Thêm getHistoryManager() để GameView có thể truy cập và hiển thị lịch sử nước đi   
+ */
+
 public class GameController {
     private  Board board;
     private boolean whiteTurn;
@@ -76,6 +89,25 @@ public class GameController {
         this.historyManager = new MoveHistoryManager();
     }
 
+    // ─── GETTERS ─────────────────────────────────────────────────────────────
+ 
+    public Board getBoard() { return board; }
+    public boolean isWhiteTurn() { return whiteTurn; }
+ 
+    /**
+     * UC7.3 – Lấy MoveHistoryManager để HistoryPanel đọc dữ liệu.
+     * ĐƯỢC GỌI BỞI: GameView.refreshHistoryPanel()
+     */
+    public MoveHistoryManager getHistoryManager() { return historyManager; }
+ 
+    /**
+     * UC7.1 – Lấy danh sách notation dạng String để SaveLoadManager lưu file.
+     * ĐƯỢC GỌI BỞI: saveGame()
+     */
+    public List<String> getHistoryNotations() {
+        return historyManager.getNotations();
+    }
+
     /*
      * UC1.9 - Xác định người đi trước
      * Chuyển FirstTurnMode thành boolean whiteTurn
@@ -119,6 +151,7 @@ public class GameController {
     public void resetGame(FirstTurnMode mode) {
         this.board.initialize(); // Khởi tạo lại bàn cờ
         this.noCaptureMoveCount = 0; // UC1.19: reset bộ đếm hòa
+        this.historyManager.clear(); // Reset lịch sử nước đi
         this.historyManager.clear(); // UC7.3: xóa lịch sử
         if (mode != null) {
             setFirstTurn(mode);  // Thiết lập lượt đi đầu
@@ -359,6 +392,7 @@ public class GameController {
      * - Trước khi applyMove, kiểm tra nước đi có capture không
      * - Nếu có capture: reset noCaptureMoveCount = 0
      * - Nếu không có capture: tăng noCaptureMoveCount lên 1
+     * - GHI LỰC SỬ nước đi vào historyManager
      * - Ghi nhận lịch sử nước đi vào historyManager (UC7.3)
      */
     //UC1.2 - Di chuyển quân cờ
@@ -370,28 +404,35 @@ public class GameController {
             noCaptureMoveCount++;   // tăng khi không ăn quân
         }
 
+         // UC7.3: lưu snapshot trước khi di chuyển (để detect phong vua)
+        Board boardBefore  = this.board.copy();
+        boolean turnBefore = this.whiteTurn;
         // UC7.3: ghi nhận lịch sử nước đi
         historyManager.recordMove(whiteTurn, m, this.board);
 
         applyMove(this.board, m);
         
+        // GHI LỰC SỬ nước đi vào historyManager
+        historyManager.recordMove(turnBefore, m, boardBefore);
+        
         whiteTurn = !whiteTurn;
     }
 
+      // ─── UC7.1 – SAVE GAME ────────────────────────────────────────────────────
+ 
         // ─── UC7.1 – SAVE GAME ───────────────────────────────────────────────────
   
     /**
-     * UC7.1 – Lưu trạng thái game hiện tại ra file mặc định.
-     * Delegate sang SaveLoadManager.saveGame().
-     *
-     * @return true nếu lưu thành công
+     * UC7.1 – Lưu trạng thái game vào file mặc định "checkers_save.dat".
      *
      * LUỒNG XỬ LÝ:
-     *   1. Lấy danh sách notation từ historyManager
-     *   2. Gọi SaveLoadManager.saveGame(whiteTurn, board, notations)
-     *   3. SaveLoadManager tạo GameState → ObjectOutputStream → file
+     *   GameController → historyManager.getNotations()
+     *                 → SaveLoadManager.saveGame(whiteTurn, board, notations)
+     *                 → new GameState(...)
+     *                 → ObjectOutputStream → file .dat
      *
-     * ĐƯỢC GỌI BỞI: GameView (khi người dùng nhấn nút "Lưu game")
+     * ĐƯỢC GỌI BỞI: GameView.onSaveClicked()
+     * @return true nếu lưu thành công
      */
     public boolean saveGame() {
         List<String> notations = historyManager.getNotations();
@@ -407,25 +448,32 @@ public class GameController {
         List<String> notations = historyManager.getNotations();
         return SaveLoadManager.saveGame(whiteTurn, board, notations, filePath);
     }
+ 
+    // ─── UC7.2 – LOAD GAME ────────────────────────────────────────────────────
+ 
   
     // ─── UC7.2 – LOAD GAME ───────────────────────────────────────────────────
   
     /**
      * UC7.2 – Tải trạng thái game từ file mặc định, cập nhật board + lượt + lịch sử.
      *
-     * @return true nếu load thành công, false nếu file không tồn tại hoặc lỗi
-     *
      * LUỒNG XỬ LÝ:
-     *   1. SaveLoadManager.loadGame() → đọc file → GameState object
-     *   2. GameState.toBoard() → Board mới với vị trí quân đã lưu
-     *   3. Khôi phục whiteTurn từ GameState
-     *   4. UC7.3: historyManager.restoreFromStrings() khôi phục lịch sử
+     *   GameController → SaveLoadManager.loadGame() → GameState
+     *                 → state.toBoard()   (khôi phục board)
+     *                 → state.whiteTurn   (khôi phục lượt)
+     *                 → historyManager.restoreFromStrings() (khôi phục lịch sử)
      *
-     * ĐƯỢC GỌI BỞI: GameView (khi người dùng nhấn nút "Tải game")
+     * ĐƯỢC GỌI BỞI: GameView.onLoadClicked()
+     * @return true nếu load thành công
      */
     public boolean loadGame() {
         GameState state = SaveLoadManager.loadGame();
         if (state == null) return false;
+ 
+        this.board     = state.toBoard();
+        this.whiteTurn = state.whiteTurn;
+        this.noCaptureMoveCount = 0; // reset bộ đếm hòa sau khi load
+ 
   
         this.board     = state.toBoard();    // UC7.2: khôi phục bàn cờ
         this.whiteTurn = state.whiteTurn;    // UC7.2: khôi phục lượt đi
@@ -451,6 +499,8 @@ public class GameController {
   
         this.board     = state.toBoard();
         this.whiteTurn = state.whiteTurn;
+        this.noCaptureMoveCount = 0;
+ 
         if (state.moveHistory != null) historyManager.restoreFromStrings(state.moveHistory);
         else historyManager.clear();
         return true;
