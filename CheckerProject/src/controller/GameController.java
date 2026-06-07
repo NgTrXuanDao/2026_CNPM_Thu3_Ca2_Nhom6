@@ -172,37 +172,66 @@ public class GameController {
         whiteTurn = oldTurn;
         return all;
     }
-   //Hỗ trợ Use case UC1.6 - Kiểm tra trạng thái .  Khi nào để biết đã thắng
+
+    /*
+     * UC1.6 - Kiểm tra trạng thái – xác định người thắng
+     * UC1.18 - Hết nước đi → thua
+     * Người thực hiện: Nguyễn Khánh Duy
+     * Ngày cập nhật: 04/06/2026
+     * Nội dung:
+     * - Kiểm tra hết quân (UC1.17): bên nào về 0 quân → thua ngay, không phụ thuộc lượt
+     * - Kiểm tra hết nước đi (UC1.18): chỉ check bên đang đến lượt (whiteTurn),
+     *   tránh xét thua nhầm bên chưa đến lượt
+     * @param board Bàn cờ cần kiểm tra
+     * @return Winner.WHITE / Winner.BLACK / Winner.NONE
+     */
     public Winner checkWinner(Board board) {
-        if (board.countWhitePieces() == 0 || getAllMoves(true).size()== 0) {
-            return Winner.BLACK;
-        }
-        if (board.countBlackPieces() == 0 ||  getAllMoves(false).size()== 0) {
-            return Winner.WHITE;
-        }
+        // UC1.17 - Hết quân → thua (không phụ thuộc lượt)
+        if (board.countWhitePieces() == 0) return Winner.BLACK;
+        if (board.countBlackPieces() == 0) return Winner.WHITE;
+
+        // UC1.18 - Hết nước đi → thua (chỉ check bên đang đến lượt)
+        // Code cũ check cả 2 bên song song → có thể xét thua nhầm bên chưa đến lượt
+        if (whiteTurn && getAllMoves(true).isEmpty())  return Winner.BLACK;
+        if (!whiteTurn && getAllMoves(false).isEmpty()) return Winner.WHITE;
+
         return Winner.NONE;
     }
-   //Hỗ trợ use case: UC1.17 - Hết quân → thua và
-    //UC1.6 - Kiểm tra trạng thái
-    public  boolean hasPieces(boolean isWhite) {
-    	boolean isvalid = false;
-    	for (int r=0;r<8;r++) {
-            for (int c=0;c<8;c++) {
-                Piece p = board.getPiece(r,c);
-                if(p == null ) continue;
-                if(p.isWhite == isWhite) isvalid = true;
-            }
+
+    /*
+     * UC1.17 - Hết quân → thua
+     * UC1.6 - Kiểm tra trạng thái
+     * Người thực hiện: Nguyễn Khánh Duy
+     * Ngày cập nhật: 04/06/2026
+     * Nội dung:
+     * - Dùng countWhitePieces() / countBlackPieces() từ Board thay vì tự duyệt lại
+     *   → tránh lặp logic, đảm bảo nhất quán với checkWinner()
+     * @param isWhite true = kiểm tra White, false = kiểm tra Black
+     * @return true nếu còn ít nhất 1 quân, false nếu hết quân
+     */
+    public boolean hasPieces(boolean isWhite) {
+        if (isWhite) {
+            return board.countWhitePieces() > 0;
+        } else {
+            return board.countBlackPieces() > 0;
         }
-    	
-		return isvalid;
-		
-	}
-    // UC1.17 - Hết quân → thua và
-    // UC1.18 - Hết nước đi → thua
-	    public boolean isOver() {
-			if(!hasPieces(true)||!hasPieces(false)||getAllMoves(whiteTurn).isEmpty()) return true;
-			return false;
-		}
+    }
+
+    /*
+     * UC1.17 - Hết quân → thua
+     * UC1.18 - Hết nước đi → thua
+     * UC1.6 - Kiểm tra trạng thái
+     * Người thực hiện: Nguyễn Khánh Duy
+     * Ngày cập nhật: 04/06/2026
+     * Nội dung:
+     * - Delegate sang checkWinner() để tránh lặp logic
+     * - checkWinner() đã xử lý đủ: hết quân (UC1.17) + hết nước đi (UC1.18)
+     * - Dùng bởi AI (miniMax, alphaBeta) để dừng đệ quy khi đến node lá
+     * @return true nếu game over, false nếu vẫn đang chơi
+     */
+    public boolean isOver() {
+        return checkWinner(this.board) != Winner.NONE;
+    }
 
     /**
      * Áp dụng Move m lên board b.

@@ -42,6 +42,10 @@ public class Main {
 
         // Tao GameView va truyen controller
         GameView gameView = new GameView(controller);
+
+        // Cập nhật chế độ chơi đã chọn từ Dialog sang bàn cờ
+        gameView.currentChoice = turnDialog.getSelectedGameChoice();
+
         f.add(gameView, BorderLayout.CENTER);
 
         // Panel phia duoi chua nut Restart
@@ -53,6 +57,8 @@ public class Main {
         // Cau hinh frame
         f.setSize(600, 660);
         f.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+        f.setLocationRelativeTo(null);
         f.setVisible(true);
     }
 }
