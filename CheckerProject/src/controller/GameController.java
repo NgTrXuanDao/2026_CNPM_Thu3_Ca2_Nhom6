@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Random;
 import model.Board;
 import model.FirstTurnMode;
+import model.GameState;
 import model.Move;
 import model.Piece;
 
@@ -21,9 +22,35 @@ import model.Piece;
  * - king có thể nhảy 4 hướng (nhưng vẫn nhảy 2 ô)
  * - bắt buộc ăn: nếu có một hay nhiều capture, chỉ phép capture.
  */
+
+/**
+ * UC 7.1 - Save game, UC7.2 - Load game, UC7.3 - Lịch sử nước đi
+ * Người thực hiện: Nguyễn Trần Xuân Đào
+ * Ngày cập nhật chỉnh sửa: 07/06/2026
+ * Nội dung:
+ * - Thêm MoveHistoryManager để quản lý lịch sử nước đi (dùng cho cả save/load và hiển thị)
+ * - Cập nhật makeMove() để ghi lại lịch sử mỗi khi có nước đi mới
+ * - Cập nhật saveGame() và loadGame() để lưu và khôi phục lịch sử nước đi cùng với board và lượt
+ * - Thêm getHistoryNotations() để cung cấp danh sách notation dạng String cho SaveLoadManager
+ * - Thêm getHistoryManager() để GameView có thể truy cập và hiển thị lịch sử nước đi   
+ */
+
 public class GameController {
     private  Board board;
     private boolean whiteTurn;
+    private MoveHistoryManager historyManager;
+
+    /*
+     * UC1.19 - Lập trạng thái / không ăn lâu → hòa
+     * Người thực hiện: Nguyễn Khánh Duy
+     * Ngày cập nhật: 07/06/2026
+     * Nội dung:
+     * - noCaptureMoveCount: đếm số lượt liên tiếp không có capture
+     * - DRAW_LIMIT: ngưỡng hòa theo luật US Checkers (40 lượt không capture liên tiếp)
+     *   tương đương 20 lượt mỗi bên mà không ăn quân nào
+     */
+    private int noCaptureMoveCount = 0;
+    private static final int DRAW_LIMIT = 40;
 
     /*
      * UC1.9 - Xác định người đi trước
@@ -39,12 +66,14 @@ public class GameController {
     public GameController(Board board) {
         this.board = board;
         this.whiteTurn = true; // White bắt đầu (mặc định)
+        this.historyManager = new MoveHistoryManager();
     }
 
     /** Khởi tạo với lượt chỉ định */
     public GameController(Board board, boolean whiteTurn) {
 		this.board = board;
 		this.whiteTurn = whiteTurn;
+		this.historyManager = new MoveHistoryManager();
 	}
 
     /*
@@ -57,14 +86,28 @@ public class GameController {
         this.board = board;
         // Xác định whiteTurn dựa vào mode
         this.whiteTurn = resolveFirstTurn(mode);
+        this.historyManager = new MoveHistoryManager();
     }
 
-    /*
-     * UC1.9 - Xác định người đi trước
-     * Giải quyết chế độ FirstTurnMode thành giá trị boolean whiteTurn
-     * @param mode Chế độ chọn người đi trước
-     * @return true nếu White đi trước, false nếu Black đi trước
+    // ─── GETTERS ─────────────────────────────────────────────────────────────
+ 
+    public Board getBoard() { return board; }
+    public boolean isWhiteTurn() { return whiteTurn; }
+ 
+    /**
+     * UC7.3 – Lấy MoveHistoryManager để HistoryPanel đọc dữ liệu.
+     * ĐƯỢC GỌI BỞI: GameView.refreshHistoryPanel()
      */
+    public MoveHistoryManager getHistoryManager() { return historyManager; }
+ 
+    /**
+     * UC7.1 – Lấy danh sách notation dạng String để SaveLoadManager lưu file.
+     * ĐƯỢC GỌI BỞI: saveGame()
+     */
+    public List<String> getHistoryNotations() {
+        return historyManager.getNotations();
+    }
+
     /*
      * UC1.9 - Xác định người đi trước
      * Chuyển FirstTurnMode thành boolean whiteTurn
@@ -96,19 +139,47 @@ public class GameController {
     }
 
     /*
-     * UC1.9 - Xác định người đi trước
-     * Reset bàn cờ và thiết lập lại lượt đi đầu tiên
+     * UC1.9  - Xác định người đi trước
+     * UC1.19 - Lập trạng thái / không ăn lâu → hòa
+     * Người thực hiện: Nguyễn Khánh Duy
+     * Ngày cập nhật: 07/06/2026
+     * Nội dung:
+     * - Reset bàn cờ và thiết lập lại lượt đi đầu tiên
+     * - Reset noCaptureMoveCount về 0 khi bắt đầu game mới (UC1.19)
      * @param mode Chế độ người đi trước (có thể null để giữ nguyên chế độ cũ)
      */
     public void resetGame(FirstTurnMode mode) {
         this.board.initialize(); // Khởi tạo lại bàn cờ
+        this.noCaptureMoveCount = 0; // UC1.19: reset bộ đếm hòa
+        this.historyManager.clear(); // Reset lịch sử nước đi
         if (mode != null) {
             setFirstTurn(mode);  // Thiết lập lượt đi đầu
         }
     }
 
-	public Board getBoard() { return board; }
-    public boolean isWhiteTurn() { return whiteTurn; }
+    /*
+     * UC1.19 - Lập trạng thái / không ăn lâu → hòa
+     * Người thực hiện: Nguyễn Khánh Duy
+     * Ngày cập nhật: 07/06/2026
+     * Nội dung:
+     * - Getter để GameView hoặc AI có thể đọc bộ đếm hiện tại
+     * @return Số lượt liên tiếp không capture tính đến thời điểm này
+     */
+    public int getNoCaptureMoveCount() {
+        return noCaptureMoveCount;
+    }
+
+    /*
+     * UC1.19 - Lập trạng thái / không ăn lâu → hòa
+     * Người thực hiện: Nguyễn Khánh Duy
+     * Ngày cập nhật: 07/06/2026
+     * Nội dung:
+     * - Getter để biết ngưỡng hòa (dùng trong GameView để hiển thị cảnh báo)
+     * @return Hằng số DRAW_LIMIT (40)
+     */
+    public int getDrawLimit() {
+        return DRAW_LIMIT;
+    }
 
     // 4 hướng chéo
     //UC1.11 - Đi chéo 1 ô – không lùi trừ vua
@@ -152,9 +223,35 @@ public class GameController {
             }
         }
         return result;
+    }    //UC5.2 - Bắt buộc ăn quân nếu có thể
+    //UC5.4 - Chặn nước đi thường khi có thể ăn
+    /**
+     * Kiểm tra xem bên forWhite có ít nhất 1 quân có thể ăn không.
+     * Dùng ở GameView để chặn chọn quân không thể ăn khi có forced capture.
+     */
+    public boolean hasCaptureMoves(boolean forWhite) {
+        boolean oldTurn = whiteTurn;
+        whiteTurn = forWhite;
+        try {
+            for (int r = 0; r < 8; r++) {
+                for (int c = 0; c < 8; c++) {
+                    Piece p = board.getPiece(r, c);
+                    if (p != null && p.isWhite == forWhite) {
+                        List<Move> moves = getValidMoves(r, c);
+                        // getValidMoves chỉ trả capture nếu có, ngược lại trả normal moves
+                        if (!moves.isEmpty() && moves.get(0).isCapture()) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        } finally {
+            whiteTurn = oldTurn;
+        }
+        return false;
     }
 
-//Hỗ trợ Use case : UC1.18 - Hết nước đi → thua
+    //Hỗ trợ Use case : UC1.18 - Hết nước đi → thua
     //UC1.6 - Kiểm tra trạng thái
     public List<Move> getAllMoves(boolean forWhite) {
         List<Move> all = new ArrayList<>();
@@ -173,24 +270,30 @@ public class GameController {
     }
 
     /*
-     * UC1.6 - Kiểm tra trạng thái – xác định người thắng
+     * UC1.6  - Kiểm tra trạng thái – xác định người thắng
+     * UC1.17 - Hết quân → thua
      * UC1.18 - Hết nước đi → thua
+     * UC1.19 - Lập trạng thái / không ăn lâu → hòa
      * Người thực hiện: Nguyễn Khánh Duy
-     * Ngày cập nhật: 04/06/2026
+     * Ngày cập nhật: 07/06/2026
      * Nội dung:
-     * - Kiểm tra hết quân (UC1.17): bên nào về 0 quân → thua ngay, không phụ thuộc lượt
-     * - Kiểm tra hết nước đi (UC1.18): chỉ check bên đang đến lượt (whiteTurn),
+     * - UC1.19: kiểm tra noCaptureMoveCount >= DRAW_LIMIT trước tiên
+     *   → nếu đạt ngưỡng 40 lượt không capture liên tiếp thì trả về Winner.DRAW
+     * - UC1.17: bên nào về 0 quân → thua ngay, không phụ thuộc lượt
+     * - UC1.18: chỉ check bên đang đến lượt (whiteTurn),
      *   tránh xét thua nhầm bên chưa đến lượt
      * @param board Bàn cờ cần kiểm tra
-     * @return Winner.WHITE / Winner.BLACK / Winner.NONE
+     * @return Winner.WHITE / Winner.BLACK / Winner.DRAW / Winner.NONE
      */
     public Winner checkWinner(Board board) {
+        // UC1.19 - Không ăn quân đủ lâu → hòa (ưu tiên kiểm tra trước)
+        if (noCaptureMoveCount >= DRAW_LIMIT) return Winner.DRAW;
+
         // UC1.17 - Hết quân → thua (không phụ thuộc lượt)
         if (board.countWhitePieces() == 0) return Winner.BLACK;
         if (board.countBlackPieces() == 0) return Winner.WHITE;
 
         // UC1.18 - Hết nước đi → thua (chỉ check bên đang đến lượt)
-        // Code cũ check cả 2 bên song song → có thể xét thua nhầm bên chưa đến lượt
         if (whiteTurn && getAllMoves(true).isEmpty())  return Winner.BLACK;
         if (!whiteTurn && getAllMoves(false).isEmpty()) return Winner.WHITE;
 
@@ -219,14 +322,15 @@ public class GameController {
     /*
      * UC1.17 - Hết quân → thua
      * UC1.18 - Hết nước đi → thua
+     * UC1.19 - Lập trạng thái / không ăn lâu → hòa
      * UC1.6 - Kiểm tra trạng thái
      * Người thực hiện: Nguyễn Khánh Duy
-     * Ngày cập nhật: 04/06/2026
+     * Ngày cập nhật: 07/06/2026
      * Nội dung:
      * - Delegate sang checkWinner() để tránh lặp logic
-     * - checkWinner() đã xử lý đủ: hết quân (UC1.17) + hết nước đi (UC1.18)
+     * - checkWinner() đã xử lý đủ: hòa (UC1.19) + hết quân (UC1.17) + hết nước đi (UC1.18)
      * - Dùng bởi AI (miniMax, alphaBeta) để dừng đệ quy khi đến node lá
-     * @return true nếu game over, false nếu vẫn đang chơi
+     * @return true nếu game over (kể cả hòa), false nếu vẫn đang chơi
      */
     public boolean isOver() {
         return checkWinner(this.board) != Winner.NONE;
@@ -273,27 +377,51 @@ public class GameController {
         }
     }
 
+    /*
+     * UC1.2  - Di chuyển quân cờ
+     * UC1.19 - Lập trạng thái / không ăn lâu → hòa
+     * Người thực hiện: Nguyễn Khánh Duy
+     * Ngày cập nhật: 07/06/2026
+     * Nội dung:
+     * - Trước khi applyMove, kiểm tra nước đi có capture không
+     * - Nếu có capture: reset noCaptureMoveCount = 0
+     * - Nếu không có capture: tăng noCaptureMoveCount lên 1
+     * - GHI LỰC SỬ nước đi vào historyManager
+     */
     //UC1.2 - Di chuyển quân cờ
     public void makeMove(Move m) {
+        // UC1.19: cập nhật bộ đếm trước khi thực thi nước đi
+        if (m.isCapture()) {
+            noCaptureMoveCount = 0; // reset khi có ăn quân
+        } else {
+            noCaptureMoveCount++;   // tăng khi không ăn quân
+        }
+
+         // UC7.3: lưu snapshot trước khi di chuyển (để detect phong vua)
+        Board boardBefore  = this.board.copy();
+        boolean turnBefore = this.whiteTurn;
+
         applyMove(this.board, m);
+        
+        // GHI LỰC SỬ nước đi vào historyManager
+        historyManager.recordMove(turnBefore, m, boardBefore);
         
         whiteTurn = !whiteTurn;
     }
 
-        // ─── UC7.1 – SAVE GAME ───────────────────────────────────────────────────
+      // ─── UC7.1 – SAVE GAME ────────────────────────────────────────────────────
  
     /**
-     * UC7.1 – Lưu trạng thái game hiện tại ra file mặc định.
-     * Delegate sang SaveLoadManager.saveGame().
-     *
-     * @return true nếu lưu thành công
+     * UC7.1 – Lưu trạng thái game vào file mặc định "checkers_save.dat".
      *
      * LUỒNG XỬ LÝ:
-     *   1. Lấy danh sách notation từ historyManager
-     *   2. Gọi SaveLoadManager.saveGame(whiteTurn, board, notations)
-     *   3. SaveLoadManager tạo GameState → ObjectOutputStream → file
+     *   GameController → historyManager.getNotations()
+     *                 → SaveLoadManager.saveGame(whiteTurn, board, notations)
+     *                 → new GameState(...)
+     *                 → ObjectOutputStream → file .dat
      *
-     * ĐƯỢC GỌI BỞI: GameView (khi người dùng nhấn nút "Lưu game")
+     * ĐƯỢC GỌI BỞI: GameView.onSaveClicked()
+     * @return true nếu lưu thành công
      */
     public boolean saveGame() {
         List<String> notations = historyManager.getNotations();
@@ -310,35 +438,33 @@ public class GameController {
         return SaveLoadManager.saveGame(whiteTurn, board, notations, filePath);
     }
  
-    // ─── UC7.2 – LOAD GAME ───────────────────────────────────────────────────
+    // ─── UC7.2 – LOAD GAME ────────────────────────────────────────────────────
  
     /**
      * UC7.2 – Tải trạng thái game từ file mặc định, cập nhật board + lượt + lịch sử.
      *
-     * @return true nếu load thành công, false nếu file không tồn tại hoặc lỗi
-     *
      * LUỒNG XỬ LÝ:
-     *   1. SaveLoadManager.loadGame() → đọc file → GameState object
-     *   2. GameState.toBoard() → Board mới với vị trí quân đã lưu
-     *   3. Khôi phục whiteTurn từ GameState
-     *   4. UC7.3: historyManager.restoreFromStrings() khôi phục lịch sử
+     *   GameController → SaveLoadManager.loadGame() → GameState
+     *                 → state.toBoard()   (khôi phục board)
+     *                 → state.whiteTurn   (khôi phục lượt)
+     *                 → historyManager.restoreFromStrings() (khôi phục lịch sử)
      *
-     * ĐƯỢC GỌI BỞI: GameView (khi người dùng nhấn nút "Tải game")
+     * ĐƯỢC GỌI BỞI: GameView.onLoadClicked()
+     * @return true nếu load thành công
      */
     public boolean loadGame() {
         GameState state = SaveLoadManager.loadGame();
         if (state == null) return false;
  
-        this.board     = state.toBoard();    // UC7.2: khôi phục bàn cờ
-        this.whiteTurn = state.whiteTurn;    // UC7.2: khôi phục lượt đi
+        this.board     = state.toBoard();
+        this.whiteTurn = state.whiteTurn;
+        this.noCaptureMoveCount = 0; // reset bộ đếm hòa sau khi load
  
-        // UC7.3: khôi phục lịch sử nước đi
         if (state.moveHistory != null) {
             historyManager.restoreFromStrings(state.moveHistory);
         } else {
             historyManager.clear();
         }
- 
         return true;
     }
  
@@ -353,6 +479,8 @@ public class GameController {
  
         this.board     = state.toBoard();
         this.whiteTurn = state.whiteTurn;
+        this.noCaptureMoveCount = 0;
+ 
         if (state.moveHistory != null) historyManager.restoreFromStrings(state.moveHistory);
         else historyManager.clear();
         return true;

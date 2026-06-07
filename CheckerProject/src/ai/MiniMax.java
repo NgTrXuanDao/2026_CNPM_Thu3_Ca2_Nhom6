@@ -12,7 +12,7 @@ import model.Piece;
  * UC6.5 – Đếm số quân & vua
  * UC6.6 – Đánh giá vị trí quân
  * Người thực hiện: Nguyễn Trần Xuân Đào
- * Ngày thực hiện chỉnh sửa: 04/06/2024
+ * Ngày thực hiện chỉnh sửa: 04/06/2026
  * Mô tả: Cài đặt thuật toán Minimax thuần (không cắt tỉa). Được giữ lại để so sánh hiệu suất với AlphaBeta. Trong game thực, AlphaBeta được dùng cho tất cả chế độ; MiniMax dùng trong thí nghiệm benchmarking (alphaBetaVsMiniMax).
  */
 

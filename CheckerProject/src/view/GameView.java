@@ -1,13 +1,16 @@
 package view;
-
+ 
 import ai.AlphaBeta;
 import ai.MiniMax;
 import ai.Node;
-import controller.GameController; 
+import controller.GameController;
+import controller.MoveHistoryManager;
+import controller.SaveLoadManager;
 import controller.Winner;
 import java.awt.*;
 import java.awt.event.*;
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -48,6 +51,17 @@ import model.Piece;
  * - Thread Safety: AI chạy trên Thread riêng, giao tiếp UI qua SwingUtilities.invokeLater()
  */
 
+/**
+ * UC7.1 (Save), UC7.2 (Load), UC7.3 (History)
+ * Người thực hiện: Nguyễn Trần Xuân Đào
+ * Ngày thực hiện chỉnh sửa: 07/06/2026
+ * Mô tả: 
+ * Thêm field historyPanel + constructor nhận HistoryPanel
+ * Thêm refreshHistoryPanel() gọi sau MỖI controller.makeMove() trong handleClick / handleClick1 / handleClick3 / handleClick4
+ * Thêm onSaveClicked(), onLoadClicked(), onSaveAsClicked(), onLoadFromFileClicked(), onExportHistoryClicked() (UC7.1/7.2/7.3)
+ * Giữ nguyên: toàn bộ handleClick logic gốc (depth, delay, sync/async)
+ */
+
 public class GameView extends JPanel {
 
     private GameController controller;
@@ -57,6 +71,8 @@ public class GameView extends JPanel {
     private List<Move> possibleMoves = new ArrayList<>();
 
     private final int CELL = 70;
+
+    private HistoryPanel historyPanel;
 
     public int currentChoice = 4;
     private boolean aiThinking = false;
@@ -91,7 +107,13 @@ public class GameView extends JPanel {
     private Runnable postAnimCallback = null;
 
     public GameView(GameController controller) {
+        this(controller, null);
+    }
+
+    public GameView(GameController controller, HistoryPanel historyPanel) {
         this.controller = controller;
+        this.historyPanel = historyPanel; // Gán HistoryPanel từ constructor
+
         loadImages();
 
         setPreferredSize(new Dimension(8 * CELL, 8 * CELL + INFO_PANEL_HEIGHT));
@@ -255,6 +277,10 @@ public class GameView extends JPanel {
         Move chosen = findMove(r, c);
         if (chosen == null) { repaint(); return; }
 
+        // Thực hiện nước đi của người chơi
+        controller.makeMove(chosen);
+        refreshHistoryPanel(); // UC7.3 – cập nhật lịch sử sau nước người chơi
+
         // Chạy hiệu ứng trượt quân của Người chơi
         executeMoveWithAnimation(chosen, () -> {
             Winner winner = controller.checkWinner(controller.getBoard());
@@ -276,6 +302,8 @@ public class GameView extends JPanel {
                     SwingUtilities.invokeLater(() -> {
                         // Chạy hiệu ứng trượt quân của AI dữ liệu máy tính
                         executeMoveWithAnimation(aiMove, () -> {
+                            controller.makeMove(aiMove);
+                            refreshHistoryPanel(); // UC7.3 – cập nhật lịch sử sau nước AI
                             Winner winner1 = controller.checkWinner(controller.getBoard());
                             if (winner1 != Winner.NONE) showWinDialog(winner1);
                             aiThinking = false;
@@ -304,6 +332,11 @@ public class GameView extends JPanel {
 
         Move chosen = findMove(r, c);
         if (chosen == null) { repaint(); return; }
+
+        
+        // Thực hiện nước đi của người chơi
+        controller.makeMove(chosen);
+        refreshHistoryPanel(); // UC7.3 – cập nhật lịch sử sau nước người chơi
 
         executeMoveWithAnimation(chosen, () -> {
             Winner winner = controller.checkWinner(controller.getBoard());
@@ -347,6 +380,11 @@ public class GameView extends JPanel {
         Move chosen = findMove(r, c);
         if (chosen == null) { repaint(); return; }
 
+        
+        // Thực hiện nước đi của người chơi
+        controller.makeMove(chosen);
+        refreshHistoryPanel(); // UC7.3 – cập nhật lịch sử sau nước người chơi
+
         executeMoveWithAnimation(chosen, () -> {
             Winner winner = controller.checkWinner(controller.getBoard());
             if (winner != Winner.NONE) showWinDialog(winner);
@@ -366,6 +404,8 @@ public class GameView extends JPanel {
                 if (aiMove != null) {
                     SwingUtilities.invokeLater(() -> {
                         executeMoveWithAnimation(aiMove, () -> {
+                             controller.makeMove(aiMove);
+                             refreshHistoryPanel(); // UC7.3 – cập nhật lịch sử sau nước đi AI
                             Winner winner1 = controller.checkWinner(controller.getBoard());
                             if (winner1 != Winner.NONE) showWinDialog(winner1);
                             aiThinking = false;
@@ -394,6 +434,11 @@ public class GameView extends JPanel {
 
         Move chosen = findMove(r, c);
         if (chosen == null) { repaint(); return; }
+
+        
+        // Thực hiện nước đi của người chơi
+        controller.makeMove(chosen);
+        refreshHistoryPanel(); // UC7.3 – cập nhật lịch sử sau nước người chơi
 
         executeMoveWithAnimation(chosen, () -> {
             Winner winner = controller.checkWinner(controller.getBoard());
@@ -427,6 +472,7 @@ public class GameView extends JPanel {
 
         if (aiMove != null) {
             controller.makeMove(aiMove);
+            refreshHistoryPanel(); // UC7.3 – cập nhật lịch sử sau nước đi AI
         }
 
         aiThinking = false;
@@ -456,6 +502,7 @@ public class GameView extends JPanel {
             if (aiMove != null) {
                 SwingUtilities.invokeLater(() -> {
                     controller.makeMove(aiMove);
+                    refreshHistoryPanel(); // UC7.3 – cập nhật lịch sử sau nước đi AI
                     aiThinking = false;
                     repaint();
                 });
@@ -464,6 +511,180 @@ public class GameView extends JPanel {
             }
 
         }).start();
+    }
+
+    // ─── UC7.3 – REFRESH HISTORY PANEL ───────────────────────────────────────
+ 
+    /**
+     * UC7.3 – Cập nhật HistoryPanel sau mỗi nước đi (cả người chơi lẫn AI).
+     * An toàn khi historyPanel == null (backward compatible với constructor cũ).
+     *
+     * @param –  không có tham số; lấy dữ liệu từ controller.getHistoryManager()
+     *
+     * ĐƯỢC GỌI BỞI: handleClick, handleClick1, handleClick3, handleClick4,
+     *               alphaBetaVsMiniMax, ABVsAB (sau controller.makeMove)
+     * TRẢ VỀ: void
+     */
+    private void refreshHistoryPanel() {
+        if (historyPanel == null) return;
+        MoveHistoryManager hm = controller.getHistoryManager();
+        historyPanel.updateHistory(hm.getRecords());
+    }
+ 
+    // ─── UC7.1 – SAVE GAME ───────────────────────────────────────────────────
+ 
+    /**
+     * UC7.1 – Lưu game vào file mặc định "checkers_save.dat".
+     * Được gọi khi người dùng nhấn nút "Lưu game" trong toolbar (Main).
+     *
+     * LUỒNG XỬ LÝ:
+     *   GameView → controller.saveGame()
+     *           → SaveLoadManager.saveGame(whiteTurn, board, notations)
+     *           → new GameState(...) → ObjectOutputStream → file .dat
+     *   → JOptionPane thông báo kết quả
+     *
+     * ĐƯỢC GỌI BỞI: Main.buildToolBar() → btnSave.addActionListener
+     */
+    public void onSaveClicked() {
+        boolean ok = controller.saveGame();
+        if (ok) {
+            JOptionPane.showMessageDialog(this,
+                    "Đã lưu game vào: " + SaveLoadManager.DEFAULT_SAVE_PATH,
+                    "Lưu thành công", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            JOptionPane.showMessageDialog(this,
+                    "Lỗi khi lưu game! Kiểm tra quyền ghi file.",
+                    "Lỗi lưu game", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+ 
+    /**
+     * UC7.1 – Lưu game "Save As..." – người dùng chọn đường dẫn bằng JFileChooser.
+     * ĐƯỢC GỌI BỞI: Main.buildToolBar() → btnSaveAs.addActionListener
+     */
+    public void onSaveAsClicked() {
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("Lưu game As...");
+        fc.setFileFilter(new FileNameExtensionFilter("Checkers Save (*.dat)", "dat"));
+        fc.setSelectedFile(new File("checkers_save.dat"));
+ 
+        if (fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            String path = fc.getSelectedFile().getAbsolutePath();
+            if (!path.endsWith(".dat")) path += ".dat";
+            boolean ok = controller.saveGame(path);
+            JOptionPane.showMessageDialog(this,
+                    ok ? "Đã lưu: " + path : "Lỗi khi lưu file!",
+                    "Lưu game",
+                    ok ? JOptionPane.INFORMATION_MESSAGE : JOptionPane.ERROR_MESSAGE);
+        }
+    }
+ 
+    // ─── UC7.2 – LOAD GAME ───────────────────────────────────────────────────
+ 
+    /**
+     * UC7.2 – Tải game từ file mặc định "checkers_save.dat".
+     * Được gọi khi người dùng nhấn nút "Tải game" trong toolbar (Main).
+     *
+     * LUỒNG XỬ LÝ:
+     *   GameView → controller.loadGame()
+     *           → SaveLoadManager.loadGame() → ObjectInputStream → GameState
+     *           → state.toBoard() → cập nhật board, whiteTurn, historyManager
+     *   → refreshHistoryPanel() → repaint()
+     *   → JOptionPane thông báo kết quả
+     *
+     * ĐƯỢC GỌI BỞI: Main.buildToolBar() → btnLoad.addActionListener
+     */
+    public void onLoadClicked() {
+        if (!SaveLoadManager.defaultSaveExists()) {
+            JOptionPane.showMessageDialog(this,
+                    "Chưa có file save! Hãy lưu game trước.",
+                    "Không tìm thấy file", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+ 
+        String info = SaveLoadManager.getSaveFileInfo(SaveLoadManager.DEFAULT_SAVE_PATH);
+        int confirm = JOptionPane.showConfirmDialog(this,
+                "Tải game đã lưu?\n" + info,
+                "Xác nhận tải game", JOptionPane.YES_NO_OPTION);
+        if (confirm != JOptionPane.YES_OPTION) return;
+ 
+        boolean ok = controller.loadGame();
+        if (ok) {
+            selectedRow = selectedCol = -1;
+            possibleMoves.clear();
+            refreshHistoryPanel(); // UC7.3: khôi phục lịch sử
+            repaint();
+            JOptionPane.showMessageDialog(this,
+                    "Đã tải game thành công!",
+                    "Tải game", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            JOptionPane.showMessageDialog(this,
+                    "Lỗi khi đọc file! File có thể bị hỏng.",
+                    "Lỗi tải game", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+ 
+    /**
+     * UC7.2 – Tải game từ file tùy chọn bằng JFileChooser.
+     * ĐƯỢC GỌI BỞI: Main.buildToolBar() → btnLoadFile.addActionListener
+     */
+    public void onLoadFromFileClicked() {
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("Chọn file save...");
+        fc.setFileFilter(new FileNameExtensionFilter("Checkers Save (*.dat)", "dat"));
+ 
+        if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            String path = fc.getSelectedFile().getAbsolutePath();
+            boolean ok  = controller.loadGame(path);
+            if (ok) {
+                selectedRow = selectedCol = -1;
+                possibleMoves.clear();
+                refreshHistoryPanel();
+                repaint();
+                JOptionPane.showMessageDialog(this,
+                        "Đã tải: " + path,
+                        "Tải game", JOptionPane.INFORMATION_MESSAGE);
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Lỗi đọc file: " + path,
+                        "Lỗi", JOptionPane.ERROR_MESSAGE);
+            }
+        }
+    }
+ 
+    // ─── UC7.3 – EXPORT HISTORY ──────────────────────────────────────────────
+ 
+    /**
+     * UC7.3 – Xuất toàn bộ lịch sử nước đi ra file .txt.
+     * Người dùng chọn nơi lưu bằng JFileChooser.
+     * ĐƯỢC GỌI BỞI: Main.buildToolBar() → btnExport.addActionListener
+     */
+    public void onExportHistoryClicked() {
+        JFileChooser fc = new JFileChooser();
+        fc.setDialogTitle("Xuất lịch sử nước đi...");
+        fc.setFileFilter(new FileNameExtensionFilter("Text file (*.txt)", "txt"));
+        fc.setSelectedFile(new File("checkers_history.txt"));
+ 
+        if (fc.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+ 
+        String path = fc.getSelectedFile().getAbsolutePath();
+        if (!path.endsWith(".txt")) path += ".txt";
+ 
+        java.util.List<String> notations = controller.getHistoryNotations();
+        try (java.io.PrintWriter pw = new java.io.PrintWriter(path, "UTF-8")) {
+            pw.println("=== LICH SU VAN CO DAM ===");
+            pw.println("Tong so nuoc: " + notations.size());
+            pw.println("------------------------------");
+            for (String line : notations) pw.println(line);
+            pw.println("------------------------------");
+            JOptionPane.showMessageDialog(this,
+                    "Da xuat lich su ra:\n" + path,
+                    "Xuat lich su", JOptionPane.INFORMATION_MESSAGE);
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this,
+                    "Loi khi xuat file: " + e.getMessage(),
+                    "Loi", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private Move findMove(int r, int c) {

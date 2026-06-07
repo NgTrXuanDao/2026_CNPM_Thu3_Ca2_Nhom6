@@ -12,7 +12,7 @@ import model.Piece;
  * UC6.5 – Đếm số quân & vua (vòng lặp đếm trong heuristic)
  * UC6.6 – Đánh giá vị trí quân (vòng lặp tính điểm vị trí)
  * Người thực hiện: Nguyễn Trần Xuân Đào
- * Ngày thực hiện chỉnh sửa: 04/06/2024
+ * Ngày thực hiện chỉnh sửa: 04/06/2026
  * Mô tả: Cài đặt thuật toán Alpha-Beta Pruning – phiên bản AI mạnh nhất. Được dùng cho chế độ HARD (depth=6), EASY (depth=5), MEDIUM (depth=3). Cắt tỉa Alpha-Beta giúp loại bỏ các nhánh không cần thiết, giảm số node duyệt so với Minimax thuần ~10x ở depth cao.
  */
 public class AlphaBeta {

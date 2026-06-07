@@ -1,18 +1,17 @@
 package controller;
 
-import model.Board;
-import model.GameState;
-
 import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import model.Board;
+import model.GameState;
 
 /**
  * UC7.1 – Lưu trạng thái game
  * UC7.2 – Load ván đang chơi 
  * Người thực hiện: Nguyễn Trần Xuân Đào
- * Ngày thực hiện chỉnh sửa: 04/06/2024
+ * Ngày thực hiện chỉnh sửa: 04/06/2026
  * Mô tả: Xử lý toàn bộ nghiệp vụ lưu (UC7.1) và tải (UC7.2) trạng thái ván cờ vào/ra file nhị phân (.dat) trên đĩa. Sử dụng Java ObjectOutputStream/ObjectInputStream kết hợpvới class GameState (Serializable) để ghi/đọc dữ liệu.
  */
 public class SaveLoadManager {

@@ -1,18 +1,16 @@
 package view;
 
-import controller.MoveHistoryManager;
-import model.MoveRecord;
-
+import java.awt.*;
+import java.util.List;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
-import java.awt.*;
-import java.util.List;
+import model.MoveRecord;
 
 /**
  * UC7.3 – Xem lịch sử nước đi
  * Người thực hiện: Nguyễn Trần Xuân Đào
- * Ngày thực hiện chỉnh sửa: 04/06/2024
+ * Ngày thực hiện chỉnh sửa: 04/06/2026
  * Mô tả: Panel hiển thị lịch sử nước đi trong giao diện chính. Được đặt bên phải bàn cờ (EAST trong BorderLayout của JFrame). Tự động cuộn xuống nước mới nhất sau mỗi lần cập nhật. Hỗ trợ tô màu phân biệt nước Trắng / Đen, highlight ăn quân.
  */
 
