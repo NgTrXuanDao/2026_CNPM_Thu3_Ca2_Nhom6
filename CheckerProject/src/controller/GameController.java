@@ -152,10 +152,15 @@ public class GameController {
         this.board.initialize(); // Khởi tạo lại bàn cờ
         this.noCaptureMoveCount = 0; // UC1.19: reset bộ đếm hòa
         this.historyManager.clear(); // Reset lịch sử nước đi
+        this.historyManager.clear(); // UC7.3: xóa lịch sử
         if (mode != null) {
             setFirstTurn(mode);  // Thiết lập lượt đi đầu
         }
     }
+
+	public Board getBoard() { return board; }
+    public boolean isWhiteTurn() { return whiteTurn; }
+    public MoveHistoryManager getHistoryManager() { return historyManager; }
 
     /*
      * UC1.19 - Lập trạng thái / không ăn lâu → hòa
@@ -380,6 +385,7 @@ public class GameController {
     /*
      * UC1.2  - Di chuyển quân cờ
      * UC1.19 - Lập trạng thái / không ăn lâu → hòa
+     * UC7.3 - Xem lịch sử nước đi
      * Người thực hiện: Nguyễn Khánh Duy
      * Ngày cập nhật: 07/06/2026
      * Nội dung:
@@ -387,6 +393,7 @@ public class GameController {
      * - Nếu có capture: reset noCaptureMoveCount = 0
      * - Nếu không có capture: tăng noCaptureMoveCount lên 1
      * - GHI LỰC SỬ nước đi vào historyManager
+     * - Ghi nhận lịch sử nước đi vào historyManager (UC7.3)
      */
     //UC1.2 - Di chuyển quân cờ
     public void makeMove(Move m) {
@@ -400,6 +407,8 @@ public class GameController {
          // UC7.3: lưu snapshot trước khi di chuyển (để detect phong vua)
         Board boardBefore  = this.board.copy();
         boolean turnBefore = this.whiteTurn;
+        // UC7.3: ghi nhận lịch sử nước đi
+        historyManager.recordMove(whiteTurn, m, this.board);
 
         applyMove(this.board, m);
         
@@ -411,6 +420,8 @@ public class GameController {
 
       // ─── UC7.1 – SAVE GAME ────────────────────────────────────────────────────
  
+        // ─── UC7.1 – SAVE GAME ───────────────────────────────────────────────────
+  
     /**
      * UC7.1 – Lưu trạng thái game vào file mặc định "checkers_save.dat".
      *
@@ -427,7 +438,7 @@ public class GameController {
         List<String> notations = historyManager.getNotations();
         return SaveLoadManager.saveGame(whiteTurn, board, notations);
     }
- 
+  
     /**
      * UC7.1 – Lưu game vào file chỉ định (dùng khi "Lưu As...").
      * @param filePath Đường dẫn file đầu ra
@@ -440,6 +451,9 @@ public class GameController {
  
     // ─── UC7.2 – LOAD GAME ────────────────────────────────────────────────────
  
+  
+    // ─── UC7.2 – LOAD GAME ───────────────────────────────────────────────────
+  
     /**
      * UC7.2 – Tải trạng thái game từ file mặc định, cập nhật board + lượt + lịch sử.
      *
@@ -460,14 +474,20 @@ public class GameController {
         this.whiteTurn = state.whiteTurn;
         this.noCaptureMoveCount = 0; // reset bộ đếm hòa sau khi load
  
+  
+        this.board     = state.toBoard();    // UC7.2: khôi phục bàn cờ
+        this.whiteTurn = state.whiteTurn;    // UC7.2: khôi phục lượt đi
+  
+        // UC7.3: khôi phục lịch sử nước đi
         if (state.moveHistory != null) {
             historyManager.restoreFromStrings(state.moveHistory);
         } else {
             historyManager.clear();
         }
+  
         return true;
     }
- 
+  
     /**
      * UC7.2 – Load từ file chỉ định.
      * @param filePath Đường dẫn file
@@ -476,7 +496,7 @@ public class GameController {
     public boolean loadGame(String filePath) {
         GameState state = SaveLoadManager.loadGame(filePath);
         if (state == null) return false;
- 
+  
         this.board     = state.toBoard();
         this.whiteTurn = state.whiteTurn;
         this.noCaptureMoveCount = 0;
